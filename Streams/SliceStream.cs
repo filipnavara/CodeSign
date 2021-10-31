@@ -116,7 +116,7 @@ namespace CodeSign.Streams
             base.Dispose(disposing);
             if (disposing)
             {
-                if (_baseStream != null)
+                /*if (_baseStream != null)
                 {
                     try
                     {
@@ -125,9 +125,9 @@ namespace CodeSign.Streams
                     catch
                     {
                         // ignored
-                    }
+                    }*/
                     _baseStream = null;
-                }
+                //}
             }
         }
         public override void Write(byte[] buffer, int offset, int count)

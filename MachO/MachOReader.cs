@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using CodeSign.MachO.Commands;
 using CodeSign.Streams;
 
 namespace CodeSign.MachO
@@ -8,21 +9,77 @@ namespace CodeSign.MachO
         private static MachO ReadSingle(FatArchHeader? fatArchHeader, MachMagic magic, Stream stream)
         {
             Span<byte> headerBuffer = stackalloc byte[Math.Max(MachHeader.BinarySize, MachHeader64.BinarySize)];
+            MachO machO;
+            bool isLittleEndian;
 
             switch (magic)
             {
                 case MachMagic.MachHeaderLitteEndian:
                 case MachMagic.MachHeaderBigEndian:
                     stream.Read(headerBuffer.Slice(0, MachHeader.BinarySize));
-                    return new MachO(null, MachHeader.Read(headerBuffer, isLittleEndian: magic == MachMagic.MachHeaderLitteEndian), stream);
+                    isLittleEndian = magic == MachMagic.MachHeaderLitteEndian;
+                    machO = new MachO(null, MachHeader.Read(headerBuffer, isLittleEndian: isLittleEndian), isLittleEndian, stream);
+                    break;
 
                 case MachMagic.MachHeader64LitteEndian:
                 case MachMagic.MachHeader64BigEndian:
                     stream.Read(headerBuffer.Slice(0, MachHeader64.BinarySize));
-                    return new MachO(null, MachHeader64.Read(headerBuffer, isLittleEndian: magic == MachMagic.MachHeaderLitteEndian), stream);
+                    isLittleEndian = magic == MachMagic.MachHeader64LitteEndian;
+                    machO = new MachO(null, MachHeader64.Read(headerBuffer, isLittleEndian: isLittleEndian), isLittleEndian, stream);
+                    break;
+
+                default:
+                    throw new NotSupportedException();
             }
 
-            throw new NotSupportedException();
+            // Read load commands
+            var loadCommands = new byte[machO.Header.SizeOfCommands];
+            Span<byte> loadCommandPtr = loadCommands;
+            stream.ReadFully(loadCommands);
+            for (int i = 0; i < machO.Header.NumberOfCommands; i++)
+            {
+                var loadCommandHeader = LoadCommandHeader.Read(loadCommandPtr, isLittleEndian);
+                switch (loadCommandHeader.CommandType)
+                {
+                    case LoadCommandType.Segment:
+                        var segmentHeader = SegmentHeader.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), isLittleEndian);
+                        var sectionHeaders = new SectionHeader[segmentHeader.NumberOfSections];
+                        for (int s = 0; s < segmentHeader.NumberOfSections; s++)
+                            sectionHeaders[s] = SectionHeader.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize + SegmentHeader.BinarySize + s * SectionHeader.BinarySize), isLittleEndian);
+                        machO.LoadCommands.Add(new Segment(loadCommandHeader, segmentHeader, sectionHeaders));
+                        break;
+
+                    case LoadCommandType.Segment64:
+                        var segment64Header = Segment64Header.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), isLittleEndian);
+                        var section64Headers = new Section64Header[segment64Header.NumberOfSections];
+                        for (int s = 0; s < segment64Header.NumberOfSections; s++)
+                            section64Headers[s] = Section64Header.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize + Segment64Header.BinarySize + s * Section64Header.BinarySize), isLittleEndian);
+                        machO.LoadCommands.Add(new Segment64(loadCommandHeader, segment64Header, section64Headers));
+                        break;
+
+                    case LoadCommandType.CodeSignature:
+                    case LoadCommandType.DylibCodeSigningDRs:
+                    case LoadCommandType.SegmentSplitInfo:
+                    case LoadCommandType.FunctionStarts:
+                    case LoadCommandType.DataInCode:
+                    case LoadCommandType.LinkerOptimizationHint:
+                    case LoadCommandType.DyldExportsTrie:
+                    case LoadCommandType.DyldChainedFixups:
+                        var linkEditHeader = LinkEditHeader.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), isLittleEndian);
+                        machO.LoadCommands.Add(new LinkEdit(loadCommandHeader, linkEditHeader));
+                        break;
+
+                    // TODO: Support more standard sections
+
+                    default:
+                        machO.LoadCommands.Add(new LoadCommand(loadCommandHeader));
+                        break;
+                }
+                loadCommandPtr = loadCommandPtr.Slice((int)loadCommandHeader.CommandSize);
+            }
+
+
+            return machO;
         }
 
         public static IEnumerable<MachO> Read(Stream stream)

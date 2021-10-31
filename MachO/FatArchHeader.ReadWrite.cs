@@ -6,7 +6,7 @@ namespace CodeSign.MachO
     {
         public const int BinarySize = 20;
 
-        public static FatArchHeader Read(Span<byte> buffer, bool isLittleEndian)
+        public static FatArchHeader Read(ReadOnlySpan<byte> buffer, bool isLittleEndian)
         {
             if (isLittleEndian)
             {

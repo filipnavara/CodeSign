@@ -6,7 +6,7 @@ namespace CodeSign.MachO
     {
         public const int BinarySize = 28;
 
-        public static MachHeader64 Read(Span<byte> buffer, bool isLittleEndian)
+        public static MachHeader64 Read(ReadOnlySpan<byte> buffer, bool isLittleEndian)
         {
             if (isLittleEndian)
             {

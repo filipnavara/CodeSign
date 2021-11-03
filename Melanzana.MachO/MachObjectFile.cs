@@ -73,6 +73,7 @@ namespace Melanzana.MachO
             return
                 lowestSectionFileOffset -
                 (ulong)((Header is MachHeader64) ? MachHeader64.BinarySize : MachHeader.BinarySize) -
+                4 - // size of magic
                 Header.SizeOfCommands;
         }
 

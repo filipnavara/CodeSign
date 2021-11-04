@@ -2,6 +2,16 @@
 using System.Diagnostics;
 using System.Security.Cryptography.X509Certificates;
 using Melanzana.CodeSign;
+using Melanzana.MachO;
+
+
+/*
+var machO = MachReader.Read(File.OpenRead("/Users/filipnavara/Downloads/gc/MailClient.Mobile.iOS.app/Xamarin.PreBuilt.iOS")).ToList();
+//var codeSignAllocate = new CodeSignAllocate(machO, "rewritten");
+//codeSignAllocate.Allocate();
+using var output = File.OpenWrite("rewritten");
+MachWriter.Write(machO.First(), output);
+*/
 
 Console.WriteLine("Hello, World!");
 

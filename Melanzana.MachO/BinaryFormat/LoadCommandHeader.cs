@@ -1,9 +1,9 @@
-namespace Melanzana.MachO
+namespace Melanzana.MachO.BinaryFormat
 {
     [GenerateReaderWriter]
     public partial class LoadCommandHeader
     {
-        public LoadCommandType CommandType { get; set; }
+        public MachLoadCommandType CommandType { get; set; }
         public uint CommandSize { get; set; }
     }
 }

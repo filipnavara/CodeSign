@@ -126,7 +126,7 @@ namespace Melanzana.Streams
                     {
                         // ignored
                     }*/
-                    _baseStream = null;
+                    _baseStream = Stream.Null;
                 //}
             }
         }

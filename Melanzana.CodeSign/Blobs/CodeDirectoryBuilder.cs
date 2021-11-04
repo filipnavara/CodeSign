@@ -3,7 +3,6 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using Melanzana.MachO;
-using Melanzana.MachO.Commands;
 using Melanzana.Streams;
 
 namespace Melanzana.CodeSign.Blobs
@@ -23,7 +22,7 @@ namespace Melanzana.CodeSign.Blobs
             this.identifier = identifier;
             this.teamId = teamId;
 
-            if (executable.Header.FileType == MachFileType.Execute)
+            if (executable.FileType == MachFileType.Execute)
                 ExecutableSegmentFlags |= ExecutableSegmentFlags.MainBinary;
         }
 
@@ -74,11 +73,9 @@ namespace Melanzana.CodeSign.Blobs
             return codeDirectorySize;
         }
 
-        public byte[] Build()
+        public byte[] Build(Stream machOStream)
         {
             CodeDirectoryVersion version = CodeDirectoryVersion.HighestVersion;
-
-            using var machOStream = executable.GetStream();
 
             ulong execLength = executable.GetSigningLimit();
             uint codeSlotCount = (uint)((execLength + pageSize - 1) / pageSize);
@@ -88,7 +85,7 @@ namespace Melanzana.CodeSign.Blobs
             var size = Size(version);
             byte[] blobBuffer = new byte[size];
 
-            var textSegment = executable.LoadCommands.OfType<ISegment>().First(s => s.Name == "__TEXT");
+            var textSegment = executable.LoadCommands.OfType<MachSegment>().First(s => s.Name == "__TEXT");
             Debug.Assert(textSegment != null);
 
             var baselineHeader = new CodeDirectoryBaselineHeader();

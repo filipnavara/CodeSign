@@ -1,4 +1,4 @@
-namespace Melanzana.MachO
+namespace Melanzana.MachO.BinaryFormat
 {
     [GenerateReaderWriter]
     public partial class FatHeader

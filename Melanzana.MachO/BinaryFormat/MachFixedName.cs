@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Melanzana.MachO.Commands
+namespace Melanzana.MachO.BinaryFormat
 {
     /// <summary>
     /// Represents 16-byte null-terminated UTF-8 string
@@ -29,9 +29,16 @@ namespace Melanzana.MachO.Commands
         public void Write(Span<byte> buffer, out int bytesWritten)
         {
             // FIXME: Write this correctly
-            byte[] utf8Name = new byte[16];
-            Encoding.UTF8.GetBytes(Name, utf8Name);
-            utf8Name.CopyTo(buffer.Slice(0, 16));
+            byte[] utf8Name = Encoding.UTF8.GetBytes(Name);
+            if (utf8Name.Length >= 16)
+            {
+                utf8Name.CopyTo(buffer.Slice(0, 16));
+            }
+            else
+            {
+                utf8Name.CopyTo(buffer.Slice(0, utf8Name.Length));
+                buffer.Slice(utf8Name.Length, 16 - utf8Name.Length).Clear();
+            }
             bytesWritten = 16;
         }
 

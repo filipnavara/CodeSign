@@ -1,89 +1,188 @@
 using System.Buffers.Binary;
-using Melanzana.MachO.Commands;
+using Melanzana.MachO.BinaryFormat;
 using Melanzana.Streams;
 
 namespace Melanzana.MachO
 {
-    public static class MachOReader
+    public static class MachReader
     {
+        private static MachSegment ReadSegment(ReadOnlySpan<byte> loadCommandPtr, bool isLittleEndian, Stream stream)
+        {
+            var segmentHeader = SegmentHeader.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), isLittleEndian, out var _);
+
+            var machSegment = segmentHeader.NumberOfSections == 0 && segmentHeader.FileSize != 0 ? 
+                new MachSegment(stream.Slice(segmentHeader.FileOffset, segmentHeader.FileSize)) :
+                new MachSegment();
+            machSegment.FileOffset = segmentHeader.FileOffset;
+            machSegment.OriginalFileSize = segmentHeader.FileSize;
+            machSegment.Name = segmentHeader.Name;
+            machSegment.Address = segmentHeader.Address;
+            machSegment.Size = segmentHeader.Size;
+            machSegment.MaximalProtection = segmentHeader.MaximalProtection;
+            machSegment.InitialProtection = segmentHeader.InitialProtection;
+            machSegment.Flags = segmentHeader.Flags;
+
+            for (int s = 0; s < segmentHeader.NumberOfSections; s++)
+            {
+                var sectionHeader = SectionHeader.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize + SegmentHeader.BinarySize + s * SectionHeader.BinarySize), isLittleEndian, out var _);
+                var sectionType = (MachSectionType)(sectionHeader.Flags & 0xff);
+                MachSection section;
+
+                if (sectionHeader.Size != 0 &&
+                    sectionType != MachSectionType.ZeroFill &&
+                    sectionType != MachSectionType.GBZeroFill &&
+                    sectionType != MachSectionType.ThreadLocalZeroFill)
+                {
+                    section = new MachSection(stream.Slice(sectionHeader.FileOffset, sectionHeader.Size));
+                }
+                else
+                {
+                    section = new MachSection { Size = sectionHeader.Size };
+                }
+
+                section.SectionName = sectionHeader.SectionName;
+                section.SegmentName = sectionHeader.SegmentName;
+                section.Address = sectionHeader.Address;
+                section.FileOffset = sectionHeader.FileOffset;
+                section.Alignment = sectionHeader.Alignment;
+                section.RelocationOffset = sectionHeader.RelocationOffset;
+                section.NumberOfReloationEntries = sectionHeader.NumberOfReloationEntries;
+                section.Flags = sectionHeader.Flags;
+                section.Reserved1 = sectionHeader.Reserved1;
+                section.Reserved2 = sectionHeader.Reserved2;
+                machSegment.Sections.Add(section);
+            }
+
+            return machSegment;
+        }
+
+        private static MachSegment ReadSegment64(ReadOnlySpan<byte> loadCommandPtr, bool isLittleEndian, Stream stream)
+        {
+            var segmentHeader = Segment64Header.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), isLittleEndian, out var _);
+
+            var machSegment = segmentHeader.NumberOfSections == 0 && segmentHeader.FileSize != 0 ? 
+                new MachSegment(stream.Slice((long)segmentHeader.FileOffset, (long)segmentHeader.FileSize)) :
+                new MachSegment();
+            machSegment.FileOffset = segmentHeader.FileOffset;
+            machSegment.OriginalFileSize = segmentHeader.FileSize;
+            machSegment.Name = segmentHeader.Name;
+            machSegment.Address = segmentHeader.Address;
+            machSegment.Size = segmentHeader.Size;
+            machSegment.MaximalProtection = segmentHeader.MaximalProtection;
+            machSegment.InitialProtection = segmentHeader.InitialProtection;
+            machSegment.Flags = segmentHeader.Flags;
+
+            for (int s = 0; s < segmentHeader.NumberOfSections; s++)
+            {
+                var sectionHeader = Section64Header.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize + Segment64Header.BinarySize + s * Section64Header.BinarySize), isLittleEndian, out var _);
+                var sectionType = (MachSectionType)(sectionHeader.Flags & 0xff);
+                MachSection section;
+
+                if (sectionHeader.Size != 0 &&
+                    sectionType != MachSectionType.ZeroFill &&
+                    sectionType != MachSectionType.GBZeroFill &&
+                    sectionType != MachSectionType.ThreadLocalZeroFill)
+                {
+                    section = new MachSection(stream.Slice(sectionHeader.FileOffset, (long)sectionHeader.Size));
+                }
+                else
+                {
+                    section = new MachSection { Size = sectionHeader.Size };
+                }
+
+                section.SectionName = sectionHeader.SectionName;
+                section.SegmentName = sectionHeader.SegmentName;
+                section.Address = sectionHeader.Address;
+                section.FileOffset = sectionHeader.FileOffset;
+                section.Alignment = sectionHeader.Alignment;
+                section.RelocationOffset = sectionHeader.RelocationOffset;
+                section.NumberOfReloationEntries = sectionHeader.NumberOfReloationEntries;
+                section.Flags = sectionHeader.Flags;
+                section.Reserved1 = sectionHeader.Reserved1;
+                section.Reserved2 = sectionHeader.Reserved2;
+                section.Reserved3 = sectionHeader.Reserved3;
+                machSegment.Sections.Add(section);
+            }
+
+            return machSegment;
+        }
+
+        private static T ReadLinkEdit<T>(ReadOnlySpan<byte> loadCommandPtr, bool isLittleEndian)
+            where T : MachLinkEdit, new()
+        {
+            var linkEditHeader = LinkEditHeader.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), isLittleEndian, out var _);
+            return new T
+            {
+                FileOffset = linkEditHeader.FileOffset,
+                FileSize = linkEditHeader.FileSize,
+            };
+        }
+
         private static MachObjectFile ReadSingle(FatArchHeader? fatArchHeader, MachMagic magic, Stream stream)
         {
             Span<byte> headerBuffer = stackalloc byte[Math.Max(MachHeader.BinarySize, MachHeader64.BinarySize)];
-            MachObjectFile machO;
+            MachObjectFile objectFile;
+            IMachHeader machHeader;
             bool isLittleEndian;
 
             switch (magic)
             {
-                case MachMagic.MachHeaderLitteEndian:
+                case MachMagic.MachHeaderLittleEndian:
                 case MachMagic.MachHeaderBigEndian:
                     stream.Read(headerBuffer.Slice(0, MachHeader.BinarySize));
-                    isLittleEndian = magic == MachMagic.MachHeaderLitteEndian;
-                    machO = new MachObjectFile(null, MachHeader.Read(headerBuffer, isLittleEndian: isLittleEndian, out var _), isLittleEndian, stream);
+                    isLittleEndian = magic == MachMagic.MachHeaderLittleEndian;
+                    machHeader = MachHeader.Read(headerBuffer, isLittleEndian, out var _);
+                    objectFile = new MachObjectFile(stream);
                     break;
 
-                case MachMagic.MachHeader64LitteEndian:
+                case MachMagic.MachHeader64LittleEndian:
                 case MachMagic.MachHeader64BigEndian:
                     stream.Read(headerBuffer.Slice(0, MachHeader64.BinarySize));
-                    isLittleEndian = magic == MachMagic.MachHeader64LitteEndian;
-                    machO = new MachObjectFile(null, MachHeader64.Read(headerBuffer, isLittleEndian: isLittleEndian, out var _), isLittleEndian, stream);
+                    isLittleEndian = magic == MachMagic.MachHeader64LittleEndian;
+                    machHeader = MachHeader64.Read(headerBuffer, isLittleEndian, out var _);
+                    objectFile = new MachObjectFile(stream);
                     break;
 
                 default:
                     throw new NotSupportedException();
             }
 
+            objectFile.Is64Bit = machHeader is MachHeader64;
+            objectFile.IsLittleEndian = isLittleEndian;
+            objectFile.CpuType = machHeader.CpuType;
+            objectFile.CpuSubType = machHeader.CpuSubType;
+            objectFile.FileType = machHeader.FileType;
+            objectFile.Flags = machHeader.Flags;
+
             // Read load commands
             //
             // Mach-O uses the load command both to describe the segments/sections and content
             // within them. The commands, like "Code Signature" overlap with the segments. For
             // code signature in particular it will overlap with the LINKEDIT segment.
-            var loadCommands = new byte[machO.Header.SizeOfCommands];
+            var loadCommands = new byte[machHeader.SizeOfCommands];
             Span<byte> loadCommandPtr = loadCommands;
             stream.ReadFully(loadCommands);
-            for (int i = 0; i < machO.Header.NumberOfCommands; i++)
+            for (int i = 0; i < machHeader.NumberOfCommands; i++)
             {
                 var loadCommandHeader = LoadCommandHeader.Read(loadCommandPtr, isLittleEndian, out var _);
-                switch (loadCommandHeader.CommandType)
+                objectFile.LoadCommands.Add(loadCommandHeader.CommandType switch
                 {
-                    case LoadCommandType.Segment:
-                        var segmentHeader = SegmentHeader.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), isLittleEndian, out var _);
-                        var sectionHeaders = new SectionHeader[segmentHeader.NumberOfSections];
-                        for (int s = 0; s < segmentHeader.NumberOfSections; s++)
-                            sectionHeaders[s] = SectionHeader.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize + SegmentHeader.BinarySize + s * SectionHeader.BinarySize), isLittleEndian, out var _);
-                        machO.LoadCommands.Add(new Segment(loadCommandHeader, segmentHeader, sectionHeaders));
-                        break;
-
-                    case LoadCommandType.Segment64:
-                        var segment64Header = Segment64Header.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), isLittleEndian, out var _);
-                        var section64Headers = new Section64Header[segment64Header.NumberOfSections];
-                        for (int s = 0; s < segment64Header.NumberOfSections; s++)
-                            section64Headers[s] = Section64Header.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize + Segment64Header.BinarySize + s * Section64Header.BinarySize), isLittleEndian, out var _);
-                        machO.LoadCommands.Add(new Segment64(loadCommandHeader, segment64Header, section64Headers));
-                        break;
-
-                    case LoadCommandType.CodeSignature:
-                    case LoadCommandType.DylibCodeSigningDRs:
-                    case LoadCommandType.SegmentSplitInfo:
-                    case LoadCommandType.FunctionStarts:
-                    case LoadCommandType.DataInCode:
-                    case LoadCommandType.LinkerOptimizationHint:
-                    case LoadCommandType.DyldExportsTrie:
-                    case LoadCommandType.DyldChainedFixups:
-                        var linkEditHeader = LinkEditHeader.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), isLittleEndian, out var _);
-                        machO.LoadCommands.Add(new LinkEdit(loadCommandHeader, linkEditHeader));
-                        break;
-
-                    // TODO: Support more standard sections
-
-                    default:
-                        machO.LoadCommands.Add(new UnsupportedLoadCommand(loadCommandHeader, loadCommandPtr.Slice(LoadCommandHeader.BinarySize, (int)loadCommandHeader.CommandSize - LoadCommandHeader.BinarySize).ToArray()));
-                        break;
-                }
+                    MachLoadCommandType.Segment => ReadSegment(loadCommandPtr, isLittleEndian, stream),
+                    MachLoadCommandType.Segment64 => ReadSegment64(loadCommandPtr, isLittleEndian, stream),
+                    MachLoadCommandType.CodeSignature => ReadLinkEdit<MachCodeSignature>(loadCommandPtr, isLittleEndian),
+                    MachLoadCommandType.DylibCodeSigningDRs => ReadLinkEdit<MachDylibCodeSigningDirs>(loadCommandPtr, isLittleEndian),
+                    MachLoadCommandType.SegmentSplitInfo => ReadLinkEdit<MachSegmentSplitInfo>(loadCommandPtr, isLittleEndian),
+                    MachLoadCommandType.FunctionStarts => ReadLinkEdit<MachFunctionStarts>(loadCommandPtr, isLittleEndian),
+                    MachLoadCommandType.DataInCode => ReadLinkEdit<MachDataInCode>(loadCommandPtr, isLittleEndian),
+                    MachLoadCommandType.LinkerOptimizationHint => ReadLinkEdit<MachLinkerOptimizationHint>(loadCommandPtr, isLittleEndian),
+                    MachLoadCommandType.DyldExportsTrie => ReadLinkEdit<MachDyldExportsTrie>(loadCommandPtr, isLittleEndian),
+                    MachLoadCommandType.DyldChainedFixups => ReadLinkEdit<MachDyldChainedFixups>(loadCommandPtr, isLittleEndian),
+                    _ => new MachUnsupportedLoadCommand(loadCommandHeader.CommandType, loadCommandPtr.Slice(LoadCommandHeader.BinarySize, (int)loadCommandHeader.CommandSize - LoadCommandHeader.BinarySize).ToArray()),
+                });
                 loadCommandPtr = loadCommandPtr.Slice((int)loadCommandHeader.CommandSize);
             }
 
-
-            return machO;
+            return objectFile;
         }
 
         public static IEnumerable<MachObjectFile> Read(Stream stream)

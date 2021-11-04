@@ -1,6 +1,6 @@
-namespace Melanzana.MachO.Commands
+namespace Melanzana.MachO
 {
-    public enum SectionType : byte
+    public enum MachSectionType : byte
     {
         Regular = 0,
         ZeroFill = 1,

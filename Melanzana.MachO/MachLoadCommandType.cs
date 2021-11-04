@@ -1,6 +1,6 @@
 namespace Melanzana.MachO
 {
-    public enum LoadCommandType : uint
+    public enum MachLoadCommandType : uint
     {
         Segment = 0x1,
         SymbolTable = 0x2,

@@ -1,12 +1,11 @@
+using Claunia.PropertyList;
 using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
-using Claunia.PropertyList;
-using Melanzana.MachO;
-using Melanzana.MachO.Commands;
 using Melanzana.CodeSign.Blobs;
+using Melanzana.MachO;
 using Melanzana.Streams;
 
 namespace Melanzana.CodeSign
@@ -39,6 +38,8 @@ namespace Melanzana.CodeSign
             var entitlementsDerBlob = EntitlementsDerBlob.Create(entitlements);
 
             var hashTypes = new[] { HashType.SHA1, HashType.SHA256 };
+            var cdBuilders = new CodeDirectoryBuilder[hashTypes.Length];
+            var cdHashes = new byte[hashTypes.Length][];
 
             ExecutableSegmentFlags executableSegmentFlags = 0;
             executableSegmentFlags |= entitlements.GetTaskAllow ? ExecutableSegmentFlags.AllowUnsigned : 0;
@@ -49,17 +50,18 @@ namespace Melanzana.CodeSign
             executableSegmentFlags |= entitlements.CanLoadCdHash ? ExecutableSegmentFlags.CanLoadCdHash : 0;
             executableSegmentFlags |= entitlements.CanExecuteCdHash ? ExecutableSegmentFlags.CanExecuteCdHash : 0;
 
-            var s = File.OpenRead(Path.Combine(bundle.BundlePath, executable));
-            foreach (var machO in MachOReader.Read(s))
+            var inputFileName = Path.Combine(bundle.BundlePath, executable);
+            var inputFile = File.OpenRead(inputFileName);
+            var objectFiles = MachReader.Read(inputFile).ToList();
+            var codeSignAllocate = new CodeSignAllocate(inputFileName, objectFiles);
+            foreach (var objectFile in objectFiles)
             {
                 //var headerPad = machO.GetHeaderPad();
 
                 long signatureSizeEstimate = 18000; // Blob Wrapper (CMS)
-                var cdBuilders = new CodeDirectoryBuilder[hashTypes.Length];
-                var cdHashes = new byte[hashTypes.Length][];
                 for (int i = 0; i < hashTypes.Length; i++)
                 {
-                    cdBuilders[i] = new CodeDirectoryBuilder(machO, bundle.BundleIdentifier, teamId)
+                    cdBuilders[i] = new CodeDirectoryBuilder(objectFile, bundle.BundleIdentifier, teamId)
                     {
                         HashType = hashTypes[i],
                     };
@@ -81,20 +83,24 @@ namespace Melanzana.CodeSign
                 signatureSizeEstimate += entitlementsBlob?.Length ?? 0;
                 signatureSizeEstimate += entitlementsBlob?.Length ?? 0;
 
-                var codeSignatureCommand = machO.LoadCommands.OfType<LinkEdit>().FirstOrDefault(c => c.Header.CommandType == LoadCommandType.CodeSignature);
-                if (codeSignatureCommand == null)
+                var codeSignatureCommand = objectFile.LoadCommands.OfType<MachCodeSignature>().FirstOrDefault();
+                if (codeSignatureCommand == null ||
+                    codeSignatureCommand.FileSize < signatureSizeEstimate)
                 {
-                    // TODO: Create code signature section
-                    throw new NotImplementedException();
+                    codeSignAllocate.SetArchSize(objectFile, (uint)signatureSizeEstimate);
                 }
-                else if (codeSignatureCommand.LinkEditHeader.FileSize <= signatureSizeEstimate)
-                {
-                    // TODO: Resize the code signature section
-                    //throw new NotImplementedException();
-                }
+            }
 
+            string tempFileName = codeSignAllocate.Allocate();
+            inputFile.Close();
+
+            // Re-read the object files
+            inputFile = File.OpenRead(tempFileName);
+            objectFiles = MachReader.Read(inputFile).ToList();
+            foreach (var objectFile in objectFiles)
+            {
                 var blobs = new List<(CodeDirectorySpecialSlot Slot, byte[] Data)>();
-                var codeDirectory = cdBuilders[0].Build();
+                var codeDirectory = cdBuilders[0].Build(objectFile.GetOriginalStream());
 
                 blobs.Add((CodeDirectorySpecialSlot.CodeDirectory, codeDirectory));
                 blobs.Add((CodeDirectorySpecialSlot.Requirements, requirementsBlob));
@@ -108,7 +114,7 @@ namespace Melanzana.CodeSign
                 cdHashes[0] = hasher.GetHashAndReset();
                 for (int i = 1; i < hashTypes.Length; i++)
                 {
-                    byte[] alternativeCodeDirectory = cdBuilders[i].Build();
+                    byte[] alternativeCodeDirectory = cdBuilders[i].Build(objectFile.GetOriginalStream());
                     blobs.Add((CodeDirectorySpecialSlot.AlternativeCodeDirectory + i - 1, alternativeCodeDirectory));
                     hasher = hashTypes[i].GetIncrementalHash();
                     hasher.AppendData(alternativeCodeDirectory);
@@ -118,35 +124,45 @@ namespace Melanzana.CodeSign
                 var cmsWrapperBlob = CmsWrapperBlob.Create(certificate, codeDirectory, hashTypes, cdHashes);
                 blobs.Add((CodeDirectorySpecialSlot.CmsWrapper, cmsWrapperBlob));
 
+                /// TODO: Hic sunt leones (all code below)
+
+                var codeSignatureCommand = objectFile.LoadCommands.OfType<MachCodeSignature>().First();
+                // Rewrite __LINKEDIT section
+                var linkEditSegment = objectFile.LoadCommands.OfType<MachSegment>().First(s => s.Name == "__LINKEDIT");
+
+                using var oldLinkEditContent = linkEditSegment.GetReadStream();
+                using var newLinkEditContent = linkEditSegment.GetWriteStream();
+
+                long bytesToCopy = oldLinkEditContent.Length - codeSignatureCommand.FileSize;
+                oldLinkEditContent.Slice(0, bytesToCopy).CopyTo(newLinkEditContent);
+
                 // FIXME: Adjust the size to match LinkEdit section?
                 long size = blobs.Sum(b => b.Data != null ? b.Data.Length + 8 : 0);
 
-                var machOStream = machO.GetStream();
-                var tempFile = File.OpenWrite(Path.Combine(bundle.BundlePath, executable + ".signed"));
-                machOStream.Slice(0, codeSignatureCommand.LinkEditHeader.FileOffset).CopyTo(tempFile);
-                var booBuffer = new byte[12 + (blobs.Count * 8)];
-                BinaryPrimitives.WriteUInt32BigEndian(booBuffer.AsSpan(0, 4), (uint)BlobMagic.EmbeddedSignature);
-                BinaryPrimitives.WriteUInt32BigEndian(booBuffer.AsSpan(4, 4), /*(uint)(12 + size)*/(uint)(machOStream.Length - codeSignatureCommand.LinkEditHeader.FileOffset));
-                BinaryPrimitives.WriteUInt32BigEndian(booBuffer.AsSpan(8, 4), (uint)blobs.Count);
-                int booBufferOffset = 12;
-                int dataOffset = booBuffer.Length;
+                var embeddedSignatureBuffer = new byte[12 + (blobs.Count * 8)];
+                BinaryPrimitives.WriteUInt32BigEndian(embeddedSignatureBuffer.AsSpan(0, 4), (uint)BlobMagic.EmbeddedSignature);
+                BinaryPrimitives.WriteUInt32BigEndian(embeddedSignatureBuffer.AsSpan(4, 4), (uint)(12 + size));
+                BinaryPrimitives.WriteUInt32BigEndian(embeddedSignatureBuffer.AsSpan(8, 4), (uint)blobs.Count);
+                int bufferOffset = 12;
+                int dataOffset = embeddedSignatureBuffer.Length;
                 foreach (var blob in blobs)
                 {
-                    BinaryPrimitives.WriteUInt32BigEndian(booBuffer.AsSpan(booBufferOffset, 4), (uint)blob.Slot);
-                    BinaryPrimitives.WriteUInt32BigEndian(booBuffer.AsSpan(booBufferOffset + 4, 4), (uint)dataOffset);
+                    BinaryPrimitives.WriteUInt32BigEndian(embeddedSignatureBuffer.AsSpan(bufferOffset, 4), (uint)blob.Slot);
+                    BinaryPrimitives.WriteUInt32BigEndian(embeddedSignatureBuffer.AsSpan(bufferOffset + 4, 4), (uint)dataOffset);
                     dataOffset += blob.Data.Length;
-                    booBufferOffset += 8;
+                    bufferOffset += 8;
                 }
-                tempFile.Write(booBuffer);
+                newLinkEditContent.Write(embeddedSignatureBuffer);
                 foreach (var blob in blobs)
                 {
-                    tempFile.Write(blob.Data);
+                    newLinkEditContent.Write(blob.Data);
                 }
-                tempFile.Write(new byte[machOStream.Length - tempFile.Position]);
-                tempFile.Close();
-                //tempFile.Write(new b)
-                //var csStream = machO.GetStream().Slice(codeSignatureCommand.LinkEditHeader.FileOffset, codeSignatureCommand.LinkEditHeader.FileSize);
+                newLinkEditContent.WritePadding(oldLinkEditContent.Length - newLinkEditContent.Position);
             }
+
+            using var outputFile = File.OpenWrite(inputFileName);
+            MachWriter.Write(objectFiles, outputFile);
+            inputFile.Close();
         }
 
         public void Sign(Bundle bundle)

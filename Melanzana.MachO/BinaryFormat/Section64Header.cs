@@ -1,4 +1,4 @@
-namespace Melanzana.MachO.Commands
+namespace Melanzana.MachO.BinaryFormat
 {
     [GenerateReaderWriter]
     public partial class Section64Header
@@ -15,7 +15,5 @@ namespace Melanzana.MachO.Commands
         public uint Reserved1 { get; set; }
         public uint Reserved2 { get; set; }
         public uint Reserved3 { get; set; }
-
-        internal SectionType Type => (SectionType)(Flags & 0xff);
     }
 }

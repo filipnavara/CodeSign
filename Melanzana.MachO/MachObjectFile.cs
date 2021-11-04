@@ -1,28 +1,30 @@
-using Melanzana.MachO.Commands;
 using Melanzana.Streams;
+using Melanzana.MachO.BinaryFormat;
 
 namespace Melanzana.MachO
 {
     public class MachObjectFile
     {
         private readonly Stream stream;
-        private readonly bool isLittleEndian;
-        private readonly List<LoadCommand> loadCommands;
 
-        public MachObjectFile(FatArchHeader? fatArchHeader, IMachHeader machHeader, bool isLittleEndian, Stream stream)
+        public MachObjectFile(Stream stream)
         {
-            FatArchHeader = fatArchHeader;
-            Header = machHeader;
-            this.isLittleEndian = isLittleEndian;
             this.stream = stream;
-            this.loadCommands = new List<LoadCommand>();
         }
 
-        public FatArchHeader? FatArchHeader { get; private set; }
+        public bool Is64Bit { get; set; }
 
-        public IMachHeader Header { get; private set; }
+        public bool IsLittleEndian { get; set; }
 
-        public IList<LoadCommand> LoadCommands => loadCommands;
+        public MachCpuType CpuType { get; set; }
+
+        public uint CpuSubType { get; set; }
+
+        public MachFileType FileType { get; set; }
+
+        public MachHeaderFlags Flags { get; set; }
+
+        public IList<MachLoadCommand> LoadCommands { get; } = new List<MachLoadCommand>();
 
         /// <summary>
         /// Get the lowest file offset of any section in the file. This allows calculating space that is
@@ -32,34 +34,17 @@ namespace Melanzana.MachO
         {
             ulong lowestFileOffset = (ulong)stream.Length;
 
-            foreach (var loadCommand in LoadCommands)
+            foreach (var segment in LoadCommands.OfType<MachSegment>())
             {
-                if (loadCommand is Segment segment)
+                foreach (var section in segment.Sections)
                 {
-                    foreach (var section in segment.Sections)
+                    if (section.Size != 0 &&
+                        section.Type != MachSectionType.ZeroFill &&
+                        section.Type != MachSectionType.GBZeroFill &&
+                        section.Type != MachSectionType.ThreadLocalZeroFill &&
+                        section.FileOffset < lowestFileOffset)
                     {
-                        if (section.Size != 0 &&
-                            section.Type != SectionType.ZeroFill &&
-                            section.Type != SectionType.GBZeroFill &&
-                            section.Type != SectionType.ThreadLocalZeroFill &&
-                            section.FileOffset < lowestFileOffset)
-                        {
-                            lowestFileOffset = section.FileOffset;
-                        }
-                    }
-                }
-                else if (loadCommand is Segment64 segment64)
-                {
-                    foreach (var section in segment64.Sections)
-                    {
-                        if (section.Size != 0 &&
-                            section.Type != SectionType.ZeroFill &&
-                            section.Type != SectionType.GBZeroFill &&
-                            section.Type != SectionType.ThreadLocalZeroFill &&
-                            section.FileOffset < lowestFileOffset)
-                        {
-                            lowestFileOffset = section.FileOffset;
-                        }
+                        lowestFileOffset = section.FileOffset;
                     }
                 }
             }
@@ -72,28 +57,37 @@ namespace Melanzana.MachO
             var lowestSectionFileOffset = GetLowestSectionFileOffset();
             return
                 lowestSectionFileOffset -
-                (ulong)((Header is MachHeader64) ? MachHeader64.BinarySize : MachHeader.BinarySize) -
-                4 - // size of magic
-                Header.SizeOfCommands;
+                (ulong)(Is64Bit ? MachHeader64.BinarySize : MachHeader.BinarySize) -
+                4 - // size of header magic
+                (ulong)LoadCommands.Sum(c => c.GetCommandSize(this));
+        }
+
+        public ulong GetSize()
+        {
+            // Assume the size is the highest file offset+size of any segment
+            return LoadCommands.OfType<MachSegment>().Max(s => s.FileOffset + s.FileSize);
         }
 
         public ulong GetSigningLimit()
         {
-            var codeSignature = LoadCommands.OfType<LinkEdit>().FirstOrDefault(c => c.Header.CommandType == LoadCommandType.CodeSignature);
+            var codeSignature = LoadCommands.OfType<MachCodeSignature>().FirstOrDefault();
             if (codeSignature != null)
             {
                 // If code signature is present it has to be at the end of the file
-                return codeSignature.LinkEditHeader.FileOffset;
+                return codeSignature.FileOffset;
             }
             else
             {
                 // If no code signature is present then we return the whole file size
-                return (ulong)stream.Length;
+                return GetSize();
             }
         }
 
-        public Stream GetStream()
+        public Stream GetOriginalStream()
         {
+            if (stream == null)
+                return Stream.Null;
+
             return stream.Slice(0, stream.Length);
         }
     }

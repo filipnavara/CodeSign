@@ -1,7 +1,7 @@
-namespace Melanzana.MachO
+namespace Melanzana.MachO.BinaryFormat
 {
     [GenerateReaderWriter]
-    public partial class MachHeader : IMachHeader
+    public partial class MachHeader64 : IMachHeader
     {
         public MachCpuType CpuType { get; set; }
         public uint CpuSubType { get; set; }
@@ -9,5 +9,6 @@ namespace Melanzana.MachO
         public uint NumberOfCommands { get; set; }
         public uint SizeOfCommands { get; set; }
         public MachHeaderFlags Flags { get; set; }
+        public uint Reserved { get; set; }
     }
 }

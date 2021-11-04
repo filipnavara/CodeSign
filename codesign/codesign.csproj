@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Melanzana.CodeSign\Melanzana.CodeSign.csproj" />
+    <ProjectReference Include="..\Melanzana.MachO\Melanzana.MachO.csproj" />
   </ItemGroup>
 
 </Project>

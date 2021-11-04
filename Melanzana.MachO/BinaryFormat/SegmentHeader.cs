@@ -1,4 +1,4 @@
-namespace Melanzana.MachO.Commands
+namespace Melanzana.MachO.BinaryFormat
 {
     [GenerateReaderWriter]
     public partial class SegmentHeader
@@ -8,8 +8,8 @@ namespace Melanzana.MachO.Commands
         public uint Size { get; set; }
         public uint FileOffset { get; set; }
         public uint FileSize { get; set; }
-        public VmProtection MaximalProtection { get; set; }
-        public VmProtection InitialProtection { get; set; }
+        public MachVmProtection MaximalProtection { get; set; }
+        public MachVmProtection InitialProtection { get; set; }
         public uint NumberOfSections { get; set; }
         public uint Flags { get; set; }
     }

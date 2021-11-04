@@ -1,4 +1,4 @@
-namespace Melanzana.MachO.Commands
+namespace Melanzana.MachO.BinaryFormat
 {
     [GenerateReaderWriter]
     public partial class LinkEditHeader

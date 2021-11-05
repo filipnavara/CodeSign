@@ -215,9 +215,9 @@ namespace Melanzana.MachO
                     case MachLoadWeakDylibCommand loadWeakDylibCommand: WriteDylibCommand(loadCommandsStream, MachLoadCommandType.LoadWeakDylib, loadWeakDylibCommand, isLittleEndian, objectFile.Is64Bit); break;
                     case MachReexportDylibCommand reexportDylibCommand: WriteDylibCommand(loadCommandsStream, MachLoadCommandType.ReexportDylib, reexportDylibCommand, isLittleEndian, objectFile.Is64Bit); break;
                     case MachEntrypointCommand entrypointCommand: WriteMainCommand(loadCommandsStream, entrypointCommand, isLittleEndian); break;
-                    case MachUnsupportedLoadCommand unsupportedLoadCommand:
-                        WriteLoadCommandHeader(loadCommandsStream, unsupportedLoadCommand.Type, unsupportedLoadCommand.Data.Length + LoadCommandHeader.BinarySize, isLittleEndian);
-                        loadCommandsStream.Write(unsupportedLoadCommand.Data);
+                    case MachCustomLoadCommand customLoadCommand:
+                        WriteLoadCommandHeader(loadCommandsStream, customLoadCommand.Type, customLoadCommand.Data.Length + LoadCommandHeader.BinarySize, isLittleEndian);
+                        loadCommandsStream.Write(customLoadCommand.Data);
                         break;
                 }
             }

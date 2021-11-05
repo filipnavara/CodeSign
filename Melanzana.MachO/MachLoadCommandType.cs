@@ -9,7 +9,7 @@ namespace Melanzana.MachO
         UnixThread = 0x5,
         LoadFixedVMSharedLibrary = 0x6,
         IdFixedVMSharedLibrary = 0x7,
-        ObjectIdenfication = 0x8,
+        ObjectIdentification = 0x8,
         FixedVMFileInclusion = 0x9,
         Prepage = 0xa,
         DynamicLinkEditSymbolTable = 0xb,

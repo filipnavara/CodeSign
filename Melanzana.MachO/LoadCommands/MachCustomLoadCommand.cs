@@ -2,9 +2,9 @@ using Melanzana.MachO.BinaryFormat;
 
 namespace Melanzana.MachO
 {
-    public class MachUnsupportedLoadCommand : MachLoadCommand
+    public class MachCustomLoadCommand : MachLoadCommand
     {
-        public MachUnsupportedLoadCommand(MachLoadCommandType type, byte[] data)
+        public MachCustomLoadCommand(MachLoadCommandType type, byte[] data)
         {
             this.Type = type;
             this.Data = data;

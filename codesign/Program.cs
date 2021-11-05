@@ -35,7 +35,7 @@ developerCertificate = store.Certificates.Find(
 
 Debug.Assert(developerCertificate != null);
 
-var signer = new Signer(provisioningProfile, developerCertificate);
+var signer = new Signer(developerCertificate, new Entitlements(provisioningProfile.Entitlements));
 //var stopwatch = new Stopwatch();
 //stopwatch.Start();
 signer.Sign(new Bundle(/*"/Applications/Airmail.localized/Airmail.app"*/ "/Users/filipnavara/Downloads/gc/MailClient.Mobile.iOS.app/"));

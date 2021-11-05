@@ -12,28 +12,24 @@ namespace Melanzana.CodeSign
 {
     public class Signer
     {
-        private readonly ProvisioningProfile provisioningProfile;
-        private readonly X509Certificate2 certificate;
+        private readonly X509Certificate2 developerCertificate;
         private readonly Entitlements entitlements;
 
         public Signer(
-            ProvisioningProfile provisioningProfile,
-            X509Certificate2 certificate)
+            X509Certificate2 developerCertificate,
+            Entitlements entitlements)
         {
-            this.provisioningProfile = provisioningProfile;
-            this.certificate = certificate;
-
-            // TODO: Entitlement merging
-            this.entitlements = new Entitlements(provisioningProfile.Entitlements);
+            this.developerCertificate = developerCertificate;
+            this.entitlements = entitlements;
         }
 
         private void SignMachO(Bundle bundle, string executable, byte[]? resourceSealBytes)
         {
-            var teamId = provisioningProfile.TeamIdentifiers.First();
+            var teamId = this.developerCertificate.GetTeamId();
 
             var requirementsBlob = RequirementsBlob.CreateDefault(
                 bundle.BundleIdentifier,
-                certificate.GetNameInfo(X509NameType.SimpleName, false));
+                developerCertificate.GetNameInfo(X509NameType.SimpleName, false));
             var entitlementsBlob = EntitlementsBlob.Create(entitlements);
             var entitlementsDerBlob = EntitlementsDerBlob.Create(entitlements);
 
@@ -121,7 +117,7 @@ namespace Melanzana.CodeSign
                     cdHashes[i] = hasher.GetHashAndReset();
                 }
 
-                var cmsWrapperBlob = CmsWrapperBlob.Create(certificate, codeDirectory, hashTypes, cdHashes);
+                var cmsWrapperBlob = CmsWrapperBlob.Create(developerCertificate, codeDirectory, hashTypes, cdHashes);
                 blobs.Add((CodeDirectorySpecialSlot.CmsWrapper, cmsWrapperBlob));
 
                 /// TODO: Hic sunt leones (all code below)

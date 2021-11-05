@@ -13,16 +13,4 @@ namespace Melanzana.MachO
 
         public uint CompatibilityVersion { get; set; }
     }
-
-    public class MachLoadDylibCommand : MachDylibCommand
-    {
-    }
-
-    public class MachLoadWeakDylibCommand : MachDylibCommand
-    {
-    }
-
-    public class MachReexportDylibCommand : MachDylibCommand
-    {
-    }
 }

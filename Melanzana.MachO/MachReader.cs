@@ -139,6 +139,17 @@ namespace Melanzana.MachO
             };
         }
 
+        private static MachEntrypointCommand ReadMainCommand(ReadOnlySpan<byte> loadCommandPtr, bool isLittleEndian)
+        {
+            var mainCommandHeader = MainCommandHeader.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), isLittleEndian, out var _);
+
+            return new MachEntrypointCommand
+            {
+                FileOffset = mainCommandHeader.FileOffset,
+                StackSize = mainCommandHeader.StackSize,
+            };
+        }
+
         private static MachObjectFile ReadSingle(FatArchHeader? fatArchHeader, MachMagic magic, Stream stream)
         {
             Span<byte> headerBuffer = stackalloc byte[Math.Max(MachHeader.BinarySize, MachHeader64.BinarySize)];
@@ -201,6 +212,7 @@ namespace Melanzana.MachO
                     MachLoadCommandType.LoadDylib => ReadDylibCommand<MachLoadDylibCommand>(loadCommandPtr, loadCommandHeader.CommandSize, isLittleEndian),
                     MachLoadCommandType.LoadWeakDylib => ReadDylibCommand<MachLoadWeakDylibCommand>(loadCommandPtr, loadCommandHeader.CommandSize, isLittleEndian),
                     MachLoadCommandType.ReexportDylib => ReadDylibCommand<MachReexportDylibCommand>(loadCommandPtr, loadCommandHeader.CommandSize, isLittleEndian),
+                    MachLoadCommandType.Main => ReadMainCommand(loadCommandPtr, isLittleEndian),
                     _ => new MachUnsupportedLoadCommand(loadCommandHeader.CommandType, loadCommandPtr.Slice(LoadCommandHeader.BinarySize, (int)loadCommandHeader.CommandSize - LoadCommandHeader.BinarySize).ToArray()),
                 });
                 loadCommandPtr = loadCommandPtr.Slice((int)loadCommandHeader.CommandSize);

@@ -192,6 +192,17 @@ namespace Melanzana.MachO
                         WriteDylibCommand(dylibCommand, loadCommandHeader.CommandSize, isLittleEndian, stream);
                         break;
 
+                    case MachEntrypointCommand entrypointCommand:
+                        var mainCommandHeaderBuffer = new byte[MainCommandHeader.BinarySize];
+                        var mainCommandHeader = new MainCommandHeader
+                        {
+                            FileOffset = entrypointCommand.FileOffset,
+                            StackSize = entrypointCommand.StackSize,
+                        };
+                        mainCommandHeader.Write(mainCommandHeaderBuffer, isLittleEndian, out var _);
+                        stream.Write(mainCommandHeaderBuffer);
+                        break;
+
                     case MachUnsupportedLoadCommand unsupportedLoadCommand:
                         stream.Write(unsupportedLoadCommand.Data);
                         break;

@@ -53,7 +53,7 @@ namespace Melanzana.CodeSign
             var inputFileName = Path.Combine(bundle.BundlePath, executable);
             var inputFile = File.OpenRead(inputFileName);
             var objectFiles = MachReader.Read(inputFile).ToList();
-            var codeSignAllocate = new CodeSignAllocate(inputFileName, objectFiles);
+            var codeSignAllocate = new CodeSignAllocate(objectFiles);
             foreach (var objectFile in objectFiles)
             {
                 //var headerPad = machO.GetHeaderPad();
@@ -161,7 +161,7 @@ namespace Melanzana.CodeSign
             }
 
             using var outputFile = File.OpenWrite(inputFileName);
-            MachWriter.Write(objectFiles, outputFile);
+            MachWriter.Write(outputFile, objectFiles);
             inputFile.Close();
         }
 

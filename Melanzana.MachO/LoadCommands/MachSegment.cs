@@ -87,18 +87,5 @@ namespace Melanzana.MachO
             dataStream = new UnclosableMemoryStream();
             return dataStream;
         }
-
-        public override MachLoadCommandType GetCommandType(MachObjectFile objectFile)
-            => objectFile.Is64Bit ? MachLoadCommandType.Segment64 : MachLoadCommandType.Segment;
-
-        public override int GetCommandSize(MachObjectFile objectFile)
-        {
-            if (objectFile.Is64Bit)
-            {
-                return LoadCommandHeader.BinarySize + Segment64Header.BinarySize + Sections.Count * Section64Header.BinarySize;
-            }
-
-            return LoadCommandHeader.BinarySize + SegmentHeader.BinarySize + Sections.Count * SectionHeader.BinarySize;
-        }
     }
 }

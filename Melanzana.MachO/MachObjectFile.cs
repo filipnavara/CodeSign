@@ -52,16 +52,6 @@ namespace Melanzana.MachO
             return lowestFileOffset;
         }
 
-        public ulong GetHeaderPad()
-        {
-            var lowestSectionFileOffset = GetLowestSectionFileOffset();
-            return
-                lowestSectionFileOffset -
-                (ulong)(Is64Bit ? MachHeader64.BinarySize : MachHeader.BinarySize) -
-                4 - // size of header magic
-                (ulong)LoadCommands.Sum(c => c.GetCommandSize(this));
-        }
-
         public ulong GetSize()
         {
             // Assume the size is the highest file offset+size of any segment

@@ -9,12 +9,10 @@ namespace Melanzana.CodeSign
     /// </summary>
     public class CodeSignAllocate
     {
-        public string fileName;
         public IList<MachObjectFile> objectFiles;
 
-        public CodeSignAllocate(string fileName, IList<MachObjectFile> objectFiles)
+        public CodeSignAllocate(IList<MachObjectFile> objectFiles)
         {
-            this.fileName = fileName;
             this.objectFiles = objectFiles;
         }
 
@@ -30,7 +28,7 @@ namespace Melanzana.CodeSign
         {
             var tempFileName = Path.GetTempFileName();
             using var output = File.OpenWrite(tempFileName);
-            MachWriter.Write(objectFiles, output);
+            MachWriter.Write(output, objectFiles);
             return tempFileName;
         }
 

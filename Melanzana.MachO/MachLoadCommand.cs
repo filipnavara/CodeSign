@@ -5,9 +5,5 @@ namespace Melanzana.MachO
         protected MachLoadCommand()
         {
         }
-
-        public abstract MachLoadCommandType GetCommandType(MachObjectFile objectFile);
-
-        public abstract int GetCommandSize(MachObjectFile objectFile);
     }
 }

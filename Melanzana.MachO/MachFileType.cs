@@ -1,6 +1,6 @@
 namespace Melanzana.MachO
 {
-    public enum MachFileType
+    public enum MachFileType : uint
     {
         Object = 1,
         Execute = 2,

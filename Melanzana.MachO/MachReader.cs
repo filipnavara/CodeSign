@@ -1,4 +1,6 @@
 using System.Buffers.Binary;
+using System.Diagnostics;
+using System.Text;
 using Melanzana.MachO.BinaryFormat;
 using Melanzana.Streams;
 
@@ -118,6 +120,25 @@ namespace Melanzana.MachO
             };
         }
 
+        private static T ReadDylibCommand<T>(ReadOnlySpan<byte> loadCommandPtr, uint commandSize, bool isLittleEndian)
+            where T : MachDylibCommand, new()
+        {
+            var dylibCommandHeader = DylibCommandHeader.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), isLittleEndian, out var _);
+
+            Debug.Assert(dylibCommandHeader.NameOffset == LoadCommandHeader.BinarySize + DylibCommandHeader.BinarySize);
+            var nameSlice = loadCommandPtr.Slice((int)dylibCommandHeader.NameOffset, (int)commandSize - (int)dylibCommandHeader.NameOffset);
+            int zeroIndex = nameSlice.IndexOf((byte)0);
+            string name = zeroIndex >= 0 ? Encoding.UTF8.GetString(nameSlice.Slice(0, zeroIndex)) : Encoding.UTF8.GetString(nameSlice);
+
+            return new T
+            {
+                Name = name,
+                Timestamp = dylibCommandHeader.Timestamp,
+                CurrentVersion = dylibCommandHeader.CurrentVersion,
+                CompatibilityVersion = dylibCommandHeader.CompatibilityVersion,
+            };
+        }
+
         private static MachObjectFile ReadSingle(FatArchHeader? fatArchHeader, MachMagic magic, Stream stream)
         {
             Span<byte> headerBuffer = stackalloc byte[Math.Max(MachHeader.BinarySize, MachHeader64.BinarySize)];
@@ -177,6 +198,9 @@ namespace Melanzana.MachO
                     MachLoadCommandType.LinkerOptimizationHint => ReadLinkEdit<MachLinkerOptimizationHint>(loadCommandPtr, isLittleEndian),
                     MachLoadCommandType.DyldExportsTrie => ReadLinkEdit<MachDyldExportsTrie>(loadCommandPtr, isLittleEndian),
                     MachLoadCommandType.DyldChainedFixups => ReadLinkEdit<MachDyldChainedFixups>(loadCommandPtr, isLittleEndian),
+                    MachLoadCommandType.LoadDylib => ReadDylibCommand<MachLoadDylibCommand>(loadCommandPtr, loadCommandHeader.CommandSize, isLittleEndian),
+                    MachLoadCommandType.LoadWeakDylib => ReadDylibCommand<MachLoadWeakDylibCommand>(loadCommandPtr, loadCommandHeader.CommandSize, isLittleEndian),
+                    MachLoadCommandType.ReexportDylib => ReadDylibCommand<MachReexportDylibCommand>(loadCommandPtr, loadCommandHeader.CommandSize, isLittleEndian),
                     _ => new MachUnsupportedLoadCommand(loadCommandHeader.CommandType, loadCommandPtr.Slice(LoadCommandHeader.BinarySize, (int)loadCommandHeader.CommandSize - LoadCommandHeader.BinarySize).ToArray()),
                 });
                 loadCommandPtr = loadCommandPtr.Slice((int)loadCommandHeader.CommandSize);

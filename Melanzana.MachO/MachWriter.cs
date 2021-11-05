@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Diagnostics;
+using System.Text;
 using Melanzana.MachO.BinaryFormat;
 using Melanzana.Streams;
 
@@ -94,6 +95,25 @@ namespace Melanzana.MachO
             }
         }
 
+        private static void WriteDylibCommand(MachDylibCommand dylibCommand, uint commandSize, bool isLittleEndian, Stream stream)
+        {
+            Span<byte> dylibCommandHeaderBuffer = stackalloc byte[DylibCommandHeader.BinarySize];
+            var dylibCommandHeader = new DylibCommandHeader
+            {
+                NameOffset = LoadCommandHeader.BinarySize + DylibCommandHeader.BinarySize,
+                Timestamp = dylibCommand.Timestamp,
+                CurrentVersion = dylibCommand.CurrentVersion,
+                CompatibilityVersion = dylibCommand.CompatibilityVersion,
+            };
+            dylibCommandHeader.Write(dylibCommandHeaderBuffer, isLittleEndian, out var _);
+            stream.Write(dylibCommandHeaderBuffer);
+            byte[] nameBytes = Encoding.UTF8.GetBytes(dylibCommand.Name);
+            stream.Write(nameBytes);
+            // The name is always written with terminating `\0` and aligned to platform
+            // pointer size.
+            stream.WritePadding(commandSize - dylibCommandHeader.NameOffset - nameBytes.Length);
+        }
+
         public static void Write(MachObjectFile objectFile, Stream stream)
         {
             long initialOffset = stream.Position;
@@ -166,6 +186,10 @@ namespace Melanzana.MachO
                         };
                         linkEditHeader.Write(linkEditHeaderBuffer, isLittleEndian, out var _);
                         stream.Write(linkEditHeaderBuffer);
+                        break;
+
+                    case MachDylibCommand dylibCommand:
+                        WriteDylibCommand(dylibCommand, loadCommandHeader.CommandSize, isLittleEndian, stream);
                         break;
 
                     case MachUnsupportedLoadCommand unsupportedLoadCommand:

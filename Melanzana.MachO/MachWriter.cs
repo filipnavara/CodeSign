@@ -185,6 +185,59 @@ namespace Melanzana.MachO
             stream.Write(mainCommandHeaderBuffer);
         }
 
+        private static uint ConvertVersion(Version version)
+            => ((uint)version.Major << 16) | (uint)((version.Minor & 0xff) << 8) | (uint)(version.Build & 0xff);
+
+        private static void WriteVersionMinCommand(Stream stream, MachLoadCommandType commandType, MachBuildVersionBase versionCommand, bool isLittleEndian)
+        {
+            WriteLoadCommandHeader(
+                stream,
+                commandType,
+                LoadCommandHeader.BinarySize + VersionMinCommandHeader.BinarySize,
+                isLittleEndian);
+
+            Span<byte> versionMinHeaderBuffer = stackalloc byte[VersionMinCommandHeader.BinarySize];
+            var versionMinHeader = new VersionMinCommandHeader
+            {
+                MinimumPlatformVersion = ConvertVersion(versionCommand.MinimumPlatformVersion),
+                SdkVersion = ConvertVersion(versionCommand.SdkVersion),
+            };
+            versionMinHeader.Write(versionMinHeaderBuffer, isLittleEndian, out var _);
+            stream.Write(versionMinHeaderBuffer);
+        }
+
+        private static void WriteBuildVersion(Stream stream, MachBuildVersion versionCommand, bool isLittleEndian)
+        {
+            WriteLoadCommandHeader(
+                stream,
+                MachLoadCommandType.BuildVersion,
+                LoadCommandHeader.BinarySize + BuildVersionCommandHeader.BinarySize + (versionCommand.ToolVersions.Count * BuildToolVersionHeader.BinarySize),
+                isLittleEndian);
+
+            Span<byte> buildVersionBuffer = stackalloc byte[BuildVersionCommandHeader.BinarySize];
+            Span<byte> buildToolVersionBuffer = stackalloc byte[BuildToolVersionHeader.BinarySize];
+            var buildVersionHeader = new BuildVersionCommandHeader
+            {
+                Platform = versionCommand.Platform,
+                MinimumPlatformVersion = ConvertVersion(versionCommand.MinimumPlatformVersion),
+                SdkVersion = ConvertVersion(versionCommand.SdkVersion),
+                NumberOfTools = (uint)versionCommand.ToolVersions.Count,
+            };
+            buildVersionHeader.Write(buildVersionBuffer, isLittleEndian, out var _);
+            stream.Write(buildVersionBuffer);
+
+            foreach (var toolVersion in versionCommand.ToolVersions)
+            {
+                var buildToolVersionHeader = new BuildToolVersionHeader
+                {
+                    BuildTool = toolVersion.BuildTool,
+                    Version = ConvertVersion(toolVersion.Version),
+                };
+                buildToolVersionHeader.Write(buildToolVersionBuffer, isLittleEndian, out var _);
+                stream.Write(buildToolVersionBuffer);
+            }
+        }
+
         public static void Write(Stream stream, MachObjectFile objectFile)
         {
             long initialOffset = stream.Position;
@@ -215,6 +268,11 @@ namespace Melanzana.MachO
                     case MachLoadWeakDylibCommand loadWeakDylibCommand: WriteDylibCommand(loadCommandsStream, MachLoadCommandType.LoadWeakDylib, loadWeakDylibCommand, isLittleEndian, objectFile.Is64Bit); break;
                     case MachReexportDylibCommand reexportDylibCommand: WriteDylibCommand(loadCommandsStream, MachLoadCommandType.ReexportDylib, reexportDylibCommand, isLittleEndian, objectFile.Is64Bit); break;
                     case MachEntrypointCommand entrypointCommand: WriteMainCommand(loadCommandsStream, entrypointCommand, isLittleEndian); break;
+                    case MachBuildVersionMacOS macOSBuildVersion: WriteVersionMinCommand(loadCommandsStream, MachLoadCommandType.VersionMinMacOS, macOSBuildVersion, isLittleEndian); break;
+                    case MachBuildVersionIOS iOSBuildVersion: WriteVersionMinCommand(loadCommandsStream, MachLoadCommandType.VersionMinIPhoneOS, iOSBuildVersion, isLittleEndian); break;
+                    case MachBuildVersionTvOS tvOSBuildVersion: WriteVersionMinCommand(loadCommandsStream, MachLoadCommandType.VersionMinTvOS, tvOSBuildVersion, isLittleEndian); break;
+                    case MachBuildVersionWatchOS watchOSBuildVersion: WriteVersionMinCommand(loadCommandsStream, MachLoadCommandType.VersionMinWatchOS, watchOSBuildVersion, isLittleEndian); break;
+                    case MachBuildVersion buildVersion: WriteBuildVersion(loadCommandsStream, buildVersion, isLittleEndian); break;
                     case MachCustomLoadCommand customLoadCommand:
                         WriteLoadCommandHeader(loadCommandsStream, customLoadCommand.Type, customLoadCommand.Data.Length + LoadCommandHeader.BinarySize, isLittleEndian);
                         loadCommandsStream.Write(customLoadCommand.Data);

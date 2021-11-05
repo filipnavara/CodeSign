@@ -150,6 +150,47 @@ namespace Melanzana.MachO
             };
         }
 
+        private static Version ConvertVersion(uint version)
+            => new Version((int)(version >> 16), (int)((version >> 8) & 0xff), (int)(version & 0xff));
+
+        private static T ReadVersionMinCommand<T>(ReadOnlySpan<byte> loadCommandPtr, bool isLittleEndian)
+            where T : MachBuildVersionBase, new()
+        {
+            var versionMinCommandHeader = VersionMinCommandHeader.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), isLittleEndian, out var _);
+
+            return new T
+            {
+                MinimumPlatformVersion = ConvertVersion(versionMinCommandHeader.MinimumPlatformVersion),
+                SdkVersion = ConvertVersion(versionMinCommandHeader.SdkVersion),
+            };
+        }
+
+        private static MachBuildVersion ReadBuildVersion(ReadOnlySpan<byte> loadCommandPtr, bool isLittleEndian)
+        {
+            var buildVersionCommandHeader = BuildVersionCommandHeader.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), isLittleEndian, out var _);
+            var buildVersion = new MachBuildVersion
+            {
+                TargetPlatform = buildVersionCommandHeader.Platform,
+                MinimumPlatformVersion = ConvertVersion(buildVersionCommandHeader.MinimumPlatformVersion),
+                SdkVersion = ConvertVersion(buildVersionCommandHeader.SdkVersion),
+            };
+
+
+            loadCommandPtr = loadCommandPtr.Slice(LoadCommandHeader.BinarySize + BuildVersionCommandHeader.BinarySize);
+            for (int i = 0; i < buildVersionCommandHeader.NumberOfTools; i++)
+            {
+                var buildToolVersionHeader = BuildToolVersionHeader.Read(loadCommandPtr, isLittleEndian, out var _);
+                buildVersion.ToolVersions.Add(new MachBuildToolVersion
+                {
+                    BuildTool = buildToolVersionHeader.BuildTool,
+                    Version = ConvertVersion(buildToolVersionHeader.Version),
+                });
+                loadCommandPtr = loadCommandPtr.Slice(BuildToolVersionHeader.BinarySize);
+            }
+
+            return buildVersion;
+        }
+
         private static MachObjectFile ReadSingle(FatArchHeader? fatArchHeader, MachMagic magic, Stream stream)
         {
             Span<byte> headerBuffer = stackalloc byte[Math.Max(MachHeader.BinarySize, MachHeader64.BinarySize)];
@@ -213,6 +254,11 @@ namespace Melanzana.MachO
                     MachLoadCommandType.LoadWeakDylib => ReadDylibCommand<MachLoadWeakDylibCommand>(loadCommandPtr, loadCommandHeader.CommandSize, isLittleEndian),
                     MachLoadCommandType.ReexportDylib => ReadDylibCommand<MachReexportDylibCommand>(loadCommandPtr, loadCommandHeader.CommandSize, isLittleEndian),
                     MachLoadCommandType.Main => ReadMainCommand(loadCommandPtr, isLittleEndian),
+                    MachLoadCommandType.VersionMinMacOS => ReadVersionMinCommand<MachBuildVersionMacOS>(loadCommandPtr, isLittleEndian),
+                    MachLoadCommandType.VersionMinIPhoneOS => ReadVersionMinCommand<MachBuildVersionIOS>(loadCommandPtr, isLittleEndian),
+                    MachLoadCommandType.VersionMinTvOS => ReadVersionMinCommand<MachBuildVersionTvOS>(loadCommandPtr, isLittleEndian),
+                    MachLoadCommandType.VersionMinWatchOS => ReadVersionMinCommand<MachBuildVersionWatchOS>(loadCommandPtr, isLittleEndian),
+                    MachLoadCommandType.BuildVersion => ReadBuildVersion(loadCommandPtr, isLittleEndian),
                     _ => new MachCustomLoadCommand(loadCommandHeader.CommandType, loadCommandPtr.Slice(LoadCommandHeader.BinarySize, (int)loadCommandHeader.CommandSize - LoadCommandHeader.BinarySize).ToArray()),
                 });
                 loadCommandPtr = loadCommandPtr.Slice((int)loadCommandHeader.CommandSize);

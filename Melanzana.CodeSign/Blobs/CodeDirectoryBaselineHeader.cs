@@ -7,7 +7,7 @@ namespace Melanzana.CodeSign.Blobs
         public BlobMagic Magic;
         public uint Size;
         public CodeDirectoryVersion Version;
-        public uint Flags;
+        public CodeDirectoryFlags Flags;
         public uint HashesOffset;
         public uint IdentifierOffset;
         public uint SpecialSlotCount;

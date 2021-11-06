@@ -37,6 +37,8 @@ namespace Melanzana.CodeSign.Blobs
 
         public ExecutableSegmentFlags ExecutableSegmentFlags { get; set; }
 
+        public CodeDirectoryFlags Flags { get; set; }
+
         private static int GetFixedHeaderSize(CodeDirectoryVersion version)
         {
             int size = CodeDirectoryBaselineHeader.BinarySize;
@@ -92,7 +94,7 @@ namespace Melanzana.CodeSign.Blobs
             baselineHeader.Magic = BlobMagic.CodeDirectory;
             baselineHeader.Size = (uint)size;
             baselineHeader.Version = version;
-            baselineHeader.Flags = 0; // TODO
+            baselineHeader.Flags = Flags;
             // baselineHeader.HashesOffset = 0; -- Filled in later
             // baselineHeader.IdentifierOffset = 0; -- Filled in later
             baselineHeader.SpecialSlotCount = (uint)specialSlotCount;

@@ -12,12 +12,12 @@ namespace Melanzana.CodeSign
 {
     public class Signer
     {
-        private readonly X509Certificate2 developerCertificate;
-        private readonly Entitlements entitlements;
+        private readonly X509Certificate2? developerCertificate;
+        private readonly Entitlements? entitlements;
 
         public Signer(
-            X509Certificate2 developerCertificate,
-            Entitlements entitlements)
+            X509Certificate2? developerCertificate,
+            Entitlements? entitlements)
         {
             this.developerCertificate = developerCertificate;
             this.entitlements = entitlements;
@@ -25,26 +25,38 @@ namespace Melanzana.CodeSign
 
         private void SignMachO(Bundle bundle, string executable, byte[]? resourceSealBytes)
         {
-            var teamId = this.developerCertificate.GetTeamId();
+            var teamId = this.developerCertificate?.GetTeamId() ?? string.Empty;
 
-            var requirementsBlob = RequirementsBlob.CreateDefault(
-                bundle.BundleIdentifier,
-                developerCertificate.GetNameInfo(X509NameType.SimpleName, false));
-            var entitlementsBlob = EntitlementsBlob.Create(entitlements);
-            var entitlementsDerBlob = EntitlementsDerBlob.Create(entitlements);
+            byte[]? requirementsBlob = null;
+            byte[]? entitlementsBlob = null;
+            byte[]? entitlementsDerBlob = null;
 
             var hashTypes = new[] { HashType.SHA1, HashType.SHA256 };
             var cdBuilders = new CodeDirectoryBuilder[hashTypes.Length];
             var cdHashes = new byte[hashTypes.Length][];
 
             ExecutableSegmentFlags executableSegmentFlags = 0;
-            executableSegmentFlags |= entitlements.GetTaskAllow ? ExecutableSegmentFlags.AllowUnsigned : 0;
-            executableSegmentFlags |= entitlements.RunUnsignedCode ? ExecutableSegmentFlags.AllowUnsigned : 0;
-            executableSegmentFlags |= entitlements.Debugger ? ExecutableSegmentFlags.Debugger : 0;
-            executableSegmentFlags |= entitlements.DynamicCodeSigning ? ExecutableSegmentFlags.Jit : 0;
-            executableSegmentFlags |= entitlements.SkipLibraryValidation ? ExecutableSegmentFlags.SkipLibraryValidation : 0;
-            executableSegmentFlags |= entitlements.CanLoadCdHash ? ExecutableSegmentFlags.CanLoadCdHash : 0;
-            executableSegmentFlags |= entitlements.CanExecuteCdHash ? ExecutableSegmentFlags.CanExecuteCdHash : 0;
+
+            if (developerCertificate != null)
+            {
+                requirementsBlob = RequirementsBlob.CreateDefault(
+                    bundle.BundleIdentifier,
+                    developerCertificate.GetNameInfo(X509NameType.SimpleName, false));
+            }
+
+            if (entitlements != null)
+            {
+                executableSegmentFlags |= entitlements.GetTaskAllow ? ExecutableSegmentFlags.AllowUnsigned : 0;
+                executableSegmentFlags |= entitlements.RunUnsignedCode ? ExecutableSegmentFlags.AllowUnsigned : 0;
+                executableSegmentFlags |= entitlements.Debugger ? ExecutableSegmentFlags.Debugger : 0;
+                executableSegmentFlags |= entitlements.DynamicCodeSigning ? ExecutableSegmentFlags.Jit : 0;
+                executableSegmentFlags |= entitlements.SkipLibraryValidation ? ExecutableSegmentFlags.SkipLibraryValidation : 0;
+                executableSegmentFlags |= entitlements.CanLoadCdHash ? ExecutableSegmentFlags.CanLoadCdHash : 0;
+                executableSegmentFlags |= entitlements.CanExecuteCdHash ? ExecutableSegmentFlags.CanExecuteCdHash : 0;
+
+                entitlementsBlob = EntitlementsBlob.Create(entitlements);
+                entitlementsDerBlob = EntitlementsDerBlob.Create(entitlements);
+            }
 
             var inputFileName = Path.Combine(bundle.BundlePath, executable);
             var inputFile = File.OpenRead(inputFileName);
@@ -64,7 +76,10 @@ namespace Melanzana.CodeSign
 
                     cdBuilders[i].ExecutableSegmentFlags |= executableSegmentFlags;
 
-                    cdBuilders[i].SetSpecialSlotData(CodeDirectorySpecialSlot.Requirements, requirementsBlob);
+                    if (developerCertificate == null)
+                        cdBuilders[i].Flags |= CodeDirectoryFlags.Adhoc;
+                    if (requirementsBlob != null)
+                        cdBuilders[i].SetSpecialSlotData(CodeDirectorySpecialSlot.Requirements, requirementsBlob);
                     if (entitlementsBlob != null)
                         cdBuilders[i].SetSpecialSlotData(CodeDirectorySpecialSlot.Entitlements, entitlementsBlob);
                     if (entitlementsDerBlob != null)
@@ -75,7 +90,7 @@ namespace Melanzana.CodeSign
                     signatureSizeEstimate += cdBuilders[i].Size(CodeDirectoryVersion.HighestVersion);
                 }
 
-                signatureSizeEstimate += requirementsBlob.Length;
+                signatureSizeEstimate += requirementsBlob?.Length ?? 0;
                 signatureSizeEstimate += entitlementsBlob?.Length ?? 0;
                 signatureSizeEstimate += entitlementsBlob?.Length ?? 0;
 
@@ -99,7 +114,8 @@ namespace Melanzana.CodeSign
                 var codeDirectory = cdBuilders[0].Build(objectFile.GetOriginalStream());
 
                 blobs.Add((CodeDirectorySpecialSlot.CodeDirectory, codeDirectory));
-                blobs.Add((CodeDirectorySpecialSlot.Requirements, requirementsBlob));
+                if (requirementsBlob != null)
+                    blobs.Add((CodeDirectorySpecialSlot.Requirements, requirementsBlob));
                 if (entitlementsBlob != null)
                     blobs.Add((CodeDirectorySpecialSlot.Entitlements, entitlementsBlob));
                 if (entitlementsDerBlob != null)

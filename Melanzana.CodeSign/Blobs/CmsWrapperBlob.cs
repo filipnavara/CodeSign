@@ -27,13 +27,11 @@ namespace Melanzana.CodeSign.Blobs
         }
 
         public static byte[] Create(
-            X509Certificate2 developerCertificate,
+            X509Certificate2? developerCertificate,
             byte[] dataToSign,
             HashType[] hashTypes,
             byte[][] cdHashes)
         {
-            if (developerCertificate == null)
-                throw new ArgumentNullException(nameof(developerCertificate));
             if (dataToSign == null)
                 throw new ArgumentNullException(nameof(dataToSign));
             if (hashTypes == null)
@@ -42,6 +40,15 @@ namespace Melanzana.CodeSign.Blobs
                 throw new ArgumentNullException(nameof(cdHashes));
             if (hashTypes.Length != cdHashes.Length)
                 throw new ArgumentException($"Length of hashType ({hashTypes.Length} is different from length of cdHashes ({cdHashes.Length})");
+
+            // Ad-hoc signature
+            if (developerCertificate == null)
+            {
+                var adhocBlobBuffer = new byte[8];
+                BinaryPrimitives.WriteUInt32BigEndian(adhocBlobBuffer.AsSpan(0, 4), (uint)BlobMagic.CmsWrapper);
+                BinaryPrimitives.WriteUInt32BigEndian(adhocBlobBuffer.AsSpan(4, 4), (uint)adhocBlobBuffer.Length);
+                return adhocBlobBuffer;
+            }
 
             var certificatesList = new X509Certificate2Collection();
 

@@ -43,18 +43,28 @@ namespace Melanzana.CodeSign.Blobs
             if (hashTypes.Length != cdHashes.Length)
                 throw new ArgumentException($"Length of hashType ({hashTypes.Length} is different from length of cdHashes ({cdHashes.Length})");
 
-            X509Certificate2Collection certificatesList;
+            var certificatesList = new X509Certificate2Collection();
 
-            // FIXME: Remove the hard-coded chain building here
-            certificatesList = new X509Certificate2Collection();
-            certificatesList.Add(developerCertificate);
-            if (developerCertificate.Issuer == "C=US, O=Apple Inc., OU=G3, CN=Apple Worldwide Developer Relations Certification Authority")
-                certificatesList.Add(GetManifestCertificate(g3IntermediateCertificatePath));
-            else if (developerCertificate.Issuer == "C=US, O=Apple Inc., OU=Apple Worldwide Developer Relations, CN=Apple Worldwide Developer Relations Certification Authority")
-                certificatesList.Add(GetManifestCertificate(g1IntermediateCertificatePath));
+            // Try to build full chain
+            var chain = new X509Chain();
+            var chainPolicy = new X509ChainPolicy { TrustMode = X509ChainTrustMode.CustomRootTrust };
+            chainPolicy.CustomTrustStore.Add(GetManifestCertificate(rootCertificatePath));
+            chainPolicy.CustomTrustStore.Add(GetManifestCertificate(g1IntermediateCertificatePath));
+            chainPolicy.CustomTrustStore.Add(GetManifestCertificate(g3IntermediateCertificatePath));
+            chain.ChainPolicy = chainPolicy;
+            if (chain.Build(developerCertificate))
+            {
+                certificatesList.AddRange(chain.ChainElements.Select(e => e.Certificate).ToArray());
+            }
             else
-                throw new NotImplementedException();
-            certificatesList.Add(GetManifestCertificate(rootCertificatePath));
+            {
+                // Retry with default policy and system certificate store
+                chain.ChainPolicy = new X509ChainPolicy();
+                if (chain.Build(developerCertificate))
+                {
+                    certificatesList.AddRange(chain.ChainElements.Select(e => e.Certificate).ToArray());
+                }
+            }
 
             var cmsSigner = new CmsSigner(developerCertificate);
             cmsSigner.Certificates.AddRange(certificatesList);

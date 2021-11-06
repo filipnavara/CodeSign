@@ -12,7 +12,7 @@ namespace Melanzana.MachO
             this.stream = stream;
         }
 
-        public bool Is64Bit { get; set; }
+        public bool Is64Bit => CpuType.HasFlag(MachCpuType.Architecture64);
 
         public bool IsLittleEndian { get; set; }
 
@@ -38,10 +38,7 @@ namespace Melanzana.MachO
             {
                 foreach (var section in segment.Sections)
                 {
-                    if (section.Size != 0 &&
-                        section.Type != MachSectionType.ZeroFill &&
-                        section.Type != MachSectionType.GBZeroFill &&
-                        section.Type != MachSectionType.ThreadLocalZeroFill &&
+                    if (section.IsInFile &&
                         section.FileOffset < lowestFileOffset)
                     {
                         lowestFileOffset = section.FileOffset;

@@ -205,6 +205,7 @@ namespace Melanzana.MachO
                     stream.Read(headerBuffer.Slice(0, MachHeader.BinarySize));
                     isLittleEndian = magic == MachMagic.MachHeaderLittleEndian;
                     machHeader = MachHeader.Read(headerBuffer, isLittleEndian, out var _);
+                    Debug.Assert(!machHeader.CpuType.HasFlag(MachCpuType.Architecture64));
                     objectFile = new MachObjectFile(stream);
                     break;
 
@@ -213,6 +214,7 @@ namespace Melanzana.MachO
                     stream.Read(headerBuffer.Slice(0, MachHeader64.BinarySize));
                     isLittleEndian = magic == MachMagic.MachHeader64LittleEndian;
                     machHeader = MachHeader64.Read(headerBuffer, isLittleEndian, out var _);
+                    Debug.Assert(machHeader.CpuType.HasFlag(MachCpuType.Architecture64));
                     objectFile = new MachObjectFile(stream);
                     break;
 
@@ -220,7 +222,6 @@ namespace Melanzana.MachO
                     throw new NotSupportedException();
             }
 
-            objectFile.Is64Bit = machHeader is MachHeader64;
             objectFile.IsLittleEndian = isLittleEndian;
             objectFile.CpuType = machHeader.CpuType;
             objectFile.CpuSubType = machHeader.CpuSubType;

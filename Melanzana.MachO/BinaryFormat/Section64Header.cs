@@ -8,7 +8,7 @@ namespace Melanzana.MachO.BinaryFormat
         public ulong Address { get; set; }
         public ulong Size { get; set; }
         public uint FileOffset { get; set; }
-        public uint Alignment { get; set; }
+        public uint Log2Alignment { get; set; }
         public uint RelocationOffset { get; set; }
         public uint NumberOfReloationEntries { get; set; }
         public uint Flags { get; set; }

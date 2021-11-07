@@ -18,9 +18,9 @@ namespace Melanzana.MachO
             machSegment.FileOffset = segmentHeader.FileOffset;
             machSegment.OriginalFileSize = segmentHeader.FileSize;
             machSegment.Name = segmentHeader.Name;
-            machSegment.Address = segmentHeader.Address;
+            machSegment.VirtualAddress = segmentHeader.Address;
             machSegment.Size = segmentHeader.Size;
-            machSegment.MaximalProtection = segmentHeader.MaximalProtection;
+            machSegment.MaximumProtection = segmentHeader.MaximumProtection;
             machSegment.InitialProtection = segmentHeader.InitialProtection;
             machSegment.Flags = segmentHeader.Flags;
 
@@ -44,9 +44,9 @@ namespace Melanzana.MachO
 
                 section.SectionName = sectionHeader.SectionName;
                 section.SegmentName = sectionHeader.SegmentName;
-                section.Address = sectionHeader.Address;
+                section.VirtualAddress = sectionHeader.Address;
                 section.FileOffset = sectionHeader.FileOffset;
-                section.Alignment = sectionHeader.Alignment;
+                section.Log2Alignment = sectionHeader.Log2Alignment;
                 section.RelocationOffset = sectionHeader.RelocationOffset;
                 section.NumberOfReloationEntries = sectionHeader.NumberOfReloationEntries;
                 section.Flags = sectionHeader.Flags;
@@ -68,9 +68,9 @@ namespace Melanzana.MachO
             machSegment.FileOffset = segmentHeader.FileOffset;
             machSegment.OriginalFileSize = segmentHeader.FileSize;
             machSegment.Name = segmentHeader.Name;
-            machSegment.Address = segmentHeader.Address;
+            machSegment.VirtualAddress = segmentHeader.Address;
             machSegment.Size = segmentHeader.Size;
-            machSegment.MaximalProtection = segmentHeader.MaximalProtection;
+            machSegment.MaximumProtection = segmentHeader.MaximumProtection;
             machSegment.InitialProtection = segmentHeader.InitialProtection;
             machSegment.Flags = segmentHeader.Flags;
 
@@ -94,9 +94,9 @@ namespace Melanzana.MachO
 
                 section.SectionName = sectionHeader.SectionName;
                 section.SegmentName = sectionHeader.SegmentName;
-                section.Address = sectionHeader.Address;
+                section.VirtualAddress = sectionHeader.Address;
                 section.FileOffset = sectionHeader.FileOffset;
-                section.Alignment = sectionHeader.Alignment;
+                section.Log2Alignment = sectionHeader.Log2Alignment;
                 section.RelocationOffset = sectionHeader.RelocationOffset;
                 section.NumberOfReloationEntries = sectionHeader.NumberOfReloationEntries;
                 section.Flags = sectionHeader.Flags;

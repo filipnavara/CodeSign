@@ -36,11 +36,11 @@ namespace Melanzana.MachO
                 var segmentHeader = new Segment64Header
                 {
                     Name = segment.Name,
-                    Address = segment.Address,
+                    Address = segment.VirtualAddress,
                     Size = segment.Size,
                     FileOffset = (ulong)segment.FileOffset,
                     FileSize = (ulong)segment.FileSize,
-                    MaximalProtection = segment.MaximalProtection,
+                    MaximumProtection = segment.MaximumProtection,
                     InitialProtection = segment.InitialProtection,
                     NumberOfSections = (uint)segment.Sections.Count,
                     Flags = segment.Flags,
@@ -54,10 +54,10 @@ namespace Melanzana.MachO
                     {
                         SectionName = section.SectionName,
                         SegmentName = section.SegmentName,
-                        Address = section.Address,
+                        Address = section.VirtualAddress,
                         Size = section.Size,
                         FileOffset = section.FileOffset,
-                        Alignment = section.Alignment,
+                        Log2Alignment = section.Log2Alignment,
                         RelocationOffset = section.RelocationOffset,
                         NumberOfReloationEntries = section.NumberOfReloationEntries,
                         Flags = section.Flags,
@@ -85,11 +85,11 @@ namespace Melanzana.MachO
                 var segmentHeader = new SegmentHeader
                 {
                     Name = segment.Name,
-                    Address = (uint)segment.Address,
+                    Address = (uint)segment.VirtualAddress,
                     Size = (uint)segment.Size,
                     FileOffset = (uint)segment.FileOffset,
                     FileSize = (uint)segment.FileSize,
-                    MaximalProtection = segment.MaximalProtection,
+                    MaximumProtection = segment.MaximumProtection,
                     InitialProtection = segment.InitialProtection,
                     NumberOfSections = (uint)segment.Sections.Count,
                     Flags = segment.Flags,
@@ -103,10 +103,10 @@ namespace Melanzana.MachO
                     {
                         SectionName = section.SectionName,
                         SegmentName = section.SegmentName,
-                        Address = (uint)section.Address,
+                        Address = (uint)section.VirtualAddress,
                         Size = (uint)section.Size,
                         FileOffset = section.FileOffset,
-                        Alignment = section.Alignment,
+                        Log2Alignment = section.Log2Alignment,
                         RelocationOffset = section.RelocationOffset,
                         NumberOfReloationEntries = section.NumberOfReloationEntries,
                         Flags = section.Flags,

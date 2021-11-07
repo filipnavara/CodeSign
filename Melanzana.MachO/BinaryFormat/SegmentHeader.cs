@@ -8,9 +8,9 @@ namespace Melanzana.MachO.BinaryFormat
         public uint Size { get; set; }
         public uint FileOffset { get; set; }
         public uint FileSize { get; set; }
-        public MachVmProtection MaximalProtection { get; set; }
+        public MachVmProtection MaximumProtection { get; set; }
         public MachVmProtection InitialProtection { get; set; }
         public uint NumberOfSections { get; set; }
-        public uint Flags { get; set; }
+        public MachSegmentFlags Flags { get; set; }
     }
 }

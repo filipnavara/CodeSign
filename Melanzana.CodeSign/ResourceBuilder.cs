@@ -77,10 +77,12 @@ namespace Melanzana.CodeSign
                     {
                         yield return (fsEntryPath, fsEntryInfo, rule);
                     }
-
-                    foreach (var nestedResult in Scan(fsEntryInfo.FullName, fsEntryPath))
+                    else
                     {
-                        yield return nestedResult;
+                        foreach (var nestedResult in Scan(fsEntryInfo.FullName, fsEntryPath))
+                        {
+                            yield return nestedResult;
+                        }
                     }
                 }
             }

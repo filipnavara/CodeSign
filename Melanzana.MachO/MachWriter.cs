@@ -406,7 +406,7 @@ namespace Melanzana.MachO
                 stream.Write(fatMagic);
                 stream.Write(fatHeaderBytes);
 
-                uint offset = (uint)(FatHeader.BinarySize + objectFiles.Count * FatArchHeader.BinarySize);
+                uint offset = (uint)(4 + FatHeader.BinarySize + objectFiles.Count * FatArchHeader.BinarySize);
                 uint alignment = 0x4000;
                 foreach (var objectFile in objectFiles)
                 {
@@ -428,7 +428,7 @@ namespace Melanzana.MachO
                     offset += size;
                 }
 
-                offset = (uint)(FatHeader.BinarySize + objectFiles.Count * FatArchHeader.BinarySize);
+                offset = (uint)(4 + FatHeader.BinarySize + objectFiles.Count * FatArchHeader.BinarySize);
                 foreach (var objectFile in objectFiles)
                 {
                     uint size = (uint)objectFile.GetSize();

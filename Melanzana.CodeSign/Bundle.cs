@@ -6,6 +6,8 @@ namespace Melanzana.CodeSign
     {
         public string BundlePath { get; private set; }
 
+        public string ContentsPath { get; private set; }
+
         private readonly bool hasContents;
         private readonly bool hasResources;
         private readonly string? mainExecutable;
@@ -26,12 +28,12 @@ namespace Melanzana.CodeSign
             // - etc.
 
             hasContents = Directory.Exists(Path.Combine(path, "Contents"));
-            var contentsPath = hasContents ? Path.Combine(path, "Contents") : path;
+            ContentsPath = hasContents ? Path.Combine(path, "Contents") : path;
 
-            hasResources = hasContents && Directory.Exists(Path.Combine(contentsPath, "Resources"));
+            hasResources = hasContents && Directory.Exists(Path.Combine(ContentsPath, "Resources"));
 
             // Look for Info.plist, then check CFBundleExecutable
-            var infoPlistPath = Path.Combine(contentsPath, "Info.plist");
+            var infoPlistPath = Path.Combine(ContentsPath, "Info.plist");
             if (File.Exists(infoPlistPath))
             {
                 infoPList = (NSDictionary)PropertyListParser.Parse(infoPlistPath);
@@ -79,6 +81,7 @@ namespace Melanzana.CodeSign
                 {
                     builder.AddRule(new ResourceRule("^[^/]+") { IsNested = true, Weight = 10 });
                     builder.AddRule(new ResourceRule("^(Frameworks|SharedFrameworks|PlugIns|Plug-ins|XPCServices|Helpers|MacOS|Library/(Automator|Spotlight|LoginItems))/") { IsNested = true, Weight = 10 });
+                    builder.AddRule(new ResourceRule($"^{resourcePrefix}") { Weight = 20 });
                 }
 
                 builder.AddRule(new ResourceRule(".*\\.dSYM($|/)") { Weight = 11 });

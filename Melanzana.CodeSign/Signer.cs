@@ -53,10 +53,11 @@ namespace Melanzana.CodeSign
             return new[] { HashType.SHA1, HashType.SHA256 };
         }
 
-        private void SignMachO(Bundle bundle, string executable, byte[]? resourceSealBytes)
+        private void SignMachO(string executablePath, string? bundleIdentifier = null, byte[]? resourceSealBytes = null)
         {
             var teamId = GetTeamId();
-            var bundleIdentifier = bundle.BundleIdentifier ?? Path.GetFileName(executable);
+            
+            bundleIdentifier ??= Path.GetFileName(executablePath);
 
             byte[]? requirementsBlob = null;
             byte[]? entitlementsBlob = null;
@@ -88,8 +89,7 @@ namespace Melanzana.CodeSign
                 entitlementsDerBlob = EntitlementsDerBlob.Create(entitlements);
             }
 
-            var inputFileName = Path.Combine(bundle.BundlePath, executable);
-            var inputFile = File.OpenRead(inputFileName);
+            var inputFile = File.OpenRead(executablePath);
             var objectFiles = MachReader.Read(inputFile).ToList();
             var codeSignAllocate = new CodeSignAllocate(objectFiles);
             foreach (var objectFile in objectFiles)
@@ -215,12 +215,12 @@ namespace Melanzana.CodeSign
                 newLinkEditContent.WritePadding(oldLinkEditContent.Length - newLinkEditContent.Position);
             }
 
-            using var outputFile = File.OpenWrite(inputFileName);
+            using var outputFile = File.OpenWrite(executablePath);
             MachWriter.Write(outputFile, objectFiles);
             inputFile.Close();
         }
 
-        public void Sign(Bundle bundle)
+        public void SignBundle(Bundle bundle)
         {
             var resourceSeal = BuildResourceSeal(bundle);
             var resourceSealBytes = Encoding.UTF8.GetBytes(resourceSeal.ToXmlPropertyList());
@@ -230,7 +230,24 @@ namespace Melanzana.CodeSign
 
             if (bundle.MainExecutable != null)
             {
-                SignMachO(bundle, bundle.MainExecutable, resourceSealBytes);
+                SignMachO(Path.Combine(bundle.BundlePath, bundle.MainExecutable), bundle.BundleIdentifier, resourceSealBytes);
+            }
+        }
+
+        public void Sign(string path)
+        {
+            var attributes = File.GetAttributes(path);
+
+            // Assume a directory is a bundle
+            if (attributes.HasFlag(FileAttributes.Directory))
+            {
+                var bundle = new Bundle(path);
+                SignBundle(bundle);
+            }
+            else
+            {
+                // TODO: Add support for signing regular files, etc.
+                SignMachO(path);
             }
         }
 
@@ -262,7 +279,7 @@ namespace Melanzana.CodeSign
             return rulesPList;
         }
 
-        private static NSDictionary BuildResourceSeal(Bundle bundle)
+        private NSDictionary BuildResourceSeal(Bundle bundle)
         {
             var sha1 = IncrementalHash.CreateHash(HashAlgorithmName.SHA1);
             var sha256 = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
@@ -273,16 +290,17 @@ namespace Melanzana.CodeSign
 
             var rules2 = BuildResourceRulesPList(resourceBuilder.Rules);
             var files2 = new NSDictionary();
-            foreach (var resourceAndRule in resourceBuilder.Scan(bundle.BundlePath))
+            foreach (var resourceAndRule in resourceBuilder.Scan(bundle.ContentsPath))
             {
                 var files2Value = new NSDictionary(2);
 
-                Debug.Assert(resourceAndRule.Rule.IsNested == resourceAndRule.Info is DirectoryInfo);
-
-                if (resourceAndRule.Info is DirectoryInfo)
+                if (resourceAndRule.Rule.IsNested)
                 {
                     // TODO: Nested signature on macOS (eg. Framework)
-                    throw new NotImplementedException();
+                    // FIXME: We need to get cdhash and designated requirements and write that into the seal
+                    Sign(resourceAndRule.Info.FullName);
+                    //throw new NotImplementedException();
+                    
                 }
                 else
                 {

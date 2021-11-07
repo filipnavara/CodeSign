@@ -27,6 +27,7 @@ var signer = new Signer(new CodeSignOptions {
     //developerCertificate, null /*new Entitlements(provisioningProfile.Entitlements)*/);
 //var stopwatch = new Stopwatch();
 //stopwatch.Start();
-signer.Sign(new Bundle(/*"/Applications/Airmail.localized/Airmail.app"*/ "/Users/filipnavara/Downloads/gc/MailClient.Mobile.iOS.app/"));
+signer.Sign("/Users/filipnavara/Projects/codesign/Airmail.app");
+    ///*"/Applications/Airmail.localized/Airmail.app"*/ "/Users/filipnavara/Downloads/gc/MailClient.Mobile.iOS.app/");
 //stopwatch.Stop();
 //Console.WriteLine("Stops: " + stopwatch.Elapsed);

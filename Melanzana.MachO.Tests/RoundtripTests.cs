@@ -10,7 +10,7 @@ namespace Melanzana.MachO.Tests
         [Fact]
         public void BasicRoundtrip()
         {
-            var aOutStream = typeof(RoundtripTests).Assembly.GetManifestResourceStream("Melanzana.MachO.Tests.Data.a.out");
+            var aOutStream = typeof(RoundtripTests).Assembly.GetManifestResourceStream("Melanzana.MachO.Tests.Data.a.out")!;
             var outputStream = new MemoryStream();
             var objectFile = MachReader.Read(aOutStream).First();
             MachWriter.Write(outputStream, objectFile);

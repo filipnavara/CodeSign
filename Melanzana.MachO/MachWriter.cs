@@ -238,7 +238,7 @@ namespace Melanzana.MachO
             }
         }
 
-        public static void WriteSymbolTableCommand(Stream stream, MachSymbolTable symbolTable, bool isLittleEndian)
+        private static void WriteSymbolTableCommand(Stream stream, MachSymbolTable symbolTable, bool isLittleEndian)
         {
             WriteLoadCommandHeader(
                 stream,

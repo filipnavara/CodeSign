@@ -31,12 +31,9 @@ namespace Melanzana.MachO.Tests
             TestRoundtrip(aOutStream);
         }
 
-        //[Fact]
+        [Fact]
         public void FatRoundtrip()
         {
-            // FIXME: This doesn't work yet because the x86-64 object file pads the code in __TEXT section with
-            // 0x90 byte that we don't roundtrip since it's not part of the section. The executable still works
-            // after rewriting though.
             var aFatOutStream = typeof(RoundtripTests).Assembly.GetManifestResourceStream("Melanzana.MachO.Tests.Data.a.fat.out")!;
             TestRoundtrip(aFatOutStream);
         }

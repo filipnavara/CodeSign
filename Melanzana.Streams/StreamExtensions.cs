@@ -19,9 +19,10 @@ namespace Melanzana.Streams
                 throw new EndOfStreamException();
         }
 
-        public static void WritePadding(this Stream stream, long paddingSize)
+        public static void WritePadding(this Stream stream, long paddingSize, byte paddingByte = 0)
         {
             Span<byte> paddingBuffer = stackalloc byte[4096];
+            paddingBuffer.Fill(paddingByte);
             while (paddingSize > 0)
             {
                 long chunkSize = paddingSize > paddingBuffer.Length ? paddingBuffer.Length : paddingSize;

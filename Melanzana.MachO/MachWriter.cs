@@ -365,6 +365,8 @@ namespace Melanzana.MachO
                     }
                     else
                     {
+                        byte paddingByte = 0;
+
                         foreach (var section in segment.Sections)
                         {
                             if (section.IsInFile)
@@ -374,13 +376,34 @@ namespace Melanzana.MachO
                                 if (section.FileOffset > currentOffset)
                                 {
                                     ulong paddingSize = section.FileOffset - currentOffset;
-                                    stream.WritePadding((long)paddingSize);
+                                    stream.WritePadding((long)paddingSize, paddingByte);
                                     currentOffset += paddingSize;
                                 }
 
                                 using var sectionStream = section.GetReadStream();
                                 sectionStream.CopyTo(stream);
                                 currentOffset += (ulong)sectionStream.Length;
+
+                                bool isCodeSection =
+                                    section.Type == MachSectionType.Regular &&
+                                    section.Attributes.HasFlag(MachSectionAttributes.SomeInstructions) &&
+                                    section.Attributes.HasFlag(MachSectionAttributes.PureInstructions);
+
+                                if (isCodeSection)
+                                {
+                                    // Padding of code sections is done with NOP bytes if possible
+                                    paddingByte = objectFile.CpuType switch
+                                    {
+                                        // TODO: Arm32 / Thumb
+                                        MachCpuType.X86_64 => (byte)0x90,
+                                        MachCpuType.X86 => (byte)0x90,
+                                        _ => (byte)0,
+                                    };
+                                }
+                                else
+                                {
+                                    paddingByte = 0;
+                                }
                             }
                         }
                     }

@@ -12,39 +12,69 @@ namespace Melanzana.CodeSign
 {
     public class Signer
     {
-        private readonly X509Certificate2? developerCertificate;
-        private readonly Entitlements? entitlements;
+        private readonly CodeSignOptions codeSignOptions;
 
-        public Signer(
-            X509Certificate2? developerCertificate,
-            Entitlements? entitlements)
+        public Signer(CodeSignOptions codeSignOptions)
         {
-            this.developerCertificate = developerCertificate;
-            this.entitlements = entitlements;
+            this.codeSignOptions = codeSignOptions;
+        }
+
+        private string GetTeamId()
+        {
+            return codeSignOptions.DeveloperCertificate?.GetTeamId() ?? string.Empty;
+        }
+
+        /// <summary>
+        /// Determine ideal set of hash types necessary for code signing.
+        /// </summary>
+        /// <remarks>
+        /// macOS 10.11.4 and iOS/tvOS 11 have support for SHA-256. If the minimum platform
+        /// version specified in the executable is equal or higher than those we only
+        /// generate SHA-256. Otherwise we fallback to generating both SHA-1 and SHA-256.
+        /// </remarks>
+        private static HashType[] GetHashTypesForObjectFile(MachObjectFile objectFile)
+        {
+            var buildVersion = objectFile.LoadCommands.OfType<MachBuildVersionBase>().FirstOrDefault();
+            if (buildVersion != null)
+            {
+                switch (buildVersion.Platform)
+                {
+                    case MachPlatform.MacOS:
+                        if (buildVersion.MinimumPlatformVersion >= new Version(10, 11, 4))
+                            return new[] { HashType.SHA256 };
+                        break;
+                    case MachPlatform.IOS:
+                    case MachPlatform.TvOS:
+                        if (buildVersion.MinimumPlatformVersion.Major >= 11)
+                            return new[] { HashType.SHA256 };
+                        break;
+                }
+            }
+            return new[] { HashType.SHA1, HashType.SHA256 };
         }
 
         private void SignMachO(Bundle bundle, string executable, byte[]? resourceSealBytes)
         {
-            var teamId = this.developerCertificate?.GetTeamId() ?? string.Empty;
+            var teamId = GetTeamId();
+            var bundleIdentifier = bundle.BundleIdentifier ?? Path.GetFileName(executable);
 
             byte[]? requirementsBlob = null;
             byte[]? entitlementsBlob = null;
             byte[]? entitlementsDerBlob = null;
 
-            var hashTypes = new[] { HashType.SHA1, HashType.SHA256 };
-            var cdBuilders = new CodeDirectoryBuilder[hashTypes.Length];
-            var cdHashes = new byte[hashTypes.Length][];
+            var hashTypesPerArch = new Dictionary<(MachCpuType cpuType, uint cpuSubType), HashType[]>();
+            var cdBuildersPerArch = new Dictionary<(MachCpuType cpuType, uint cpuSubType), CodeDirectoryBuilder[]>();
 
             ExecutableSegmentFlags executableSegmentFlags = 0;
 
-            if (developerCertificate != null)
+            if (codeSignOptions.DeveloperCertificate != null)
             {
                 requirementsBlob = RequirementsBlob.CreateDefault(
-                    bundle.BundleIdentifier,
-                    developerCertificate.GetNameInfo(X509NameType.SimpleName, false));
+                    bundleIdentifier,
+                    codeSignOptions.DeveloperCertificate.GetNameInfo(X509NameType.SimpleName, false));
             }
 
-            if (entitlements != null)
+            if (codeSignOptions.Entitlements is Entitlements entitlements)
             {
                 executableSegmentFlags |= entitlements.GetTaskAllow ? ExecutableSegmentFlags.AllowUnsigned : 0;
                 executableSegmentFlags |= entitlements.RunUnsignedCode ? ExecutableSegmentFlags.AllowUnsigned : 0;
@@ -64,19 +94,23 @@ namespace Melanzana.CodeSign
             var codeSignAllocate = new CodeSignAllocate(objectFiles);
             foreach (var objectFile in objectFiles)
             {
-                //var headerPad = machO.GetHeaderPad();
+                var hashTypes = GetHashTypesForObjectFile(objectFile);
+                var cdBuilders = new CodeDirectoryBuilder[hashTypes.Length];
+    
+                hashTypesPerArch.Add((objectFile.CpuType, objectFile.CpuSubType), hashTypes);
+                cdBuildersPerArch.Add((objectFile.CpuType, objectFile.CpuSubType), cdBuilders);
 
                 long signatureSizeEstimate = 18000; // Blob Wrapper (CMS)
                 for (int i = 0; i < hashTypes.Length; i++)
                 {
-                    cdBuilders[i] = new CodeDirectoryBuilder(objectFile, bundle.BundleIdentifier, teamId)
+                    cdBuilders[i] = new CodeDirectoryBuilder(objectFile, bundleIdentifier, teamId)
                     {
                         HashType = hashTypes[i],
                     };
 
                     cdBuilders[i].ExecutableSegmentFlags |= executableSegmentFlags;
 
-                    if (developerCertificate == null)
+                    if (codeSignOptions.DeveloperCertificate == null)
                         cdBuilders[i].Flags |= CodeDirectoryFlags.Adhoc;
                     if (requirementsBlob != null)
                         cdBuilders[i].SetSpecialSlotData(CodeDirectorySpecialSlot.Requirements, requirementsBlob);
@@ -110,6 +144,9 @@ namespace Melanzana.CodeSign
             objectFiles = MachReader.Read(inputFile).ToList();
             foreach (var objectFile in objectFiles)
             {
+                var hashTypes = hashTypesPerArch[(objectFile.CpuType, objectFile.CpuSubType)];
+                var cdBuilders = cdBuildersPerArch[(objectFile.CpuType, objectFile.CpuSubType)];
+
                 var blobs = new List<(CodeDirectorySpecialSlot Slot, byte[] Data)>();
                 var codeDirectory = cdBuilders[0].Build(objectFile.GetOriginalStream());
 
@@ -121,6 +158,7 @@ namespace Melanzana.CodeSign
                 if (entitlementsDerBlob != null)
                     blobs.Add((CodeDirectorySpecialSlot.EntitlementsDer, entitlementsDerBlob));
 
+                var cdHashes = new byte[hashTypes.Length][];
                 var hasher = hashTypes[0].GetIncrementalHash();
                 hasher.AppendData(codeDirectory);
                 cdHashes[0] = hasher.GetHashAndReset();
@@ -133,7 +171,12 @@ namespace Melanzana.CodeSign
                     cdHashes[i] = hasher.GetHashAndReset();
                 }
 
-                var cmsWrapperBlob = CmsWrapperBlob.Create(developerCertificate, codeDirectory, hashTypes, cdHashes);
+                var cmsWrapperBlob = CmsWrapperBlob.Create(
+                    codeSignOptions.DeveloperCertificate,
+                    codeSignOptions.PrivateKey,
+                    codeDirectory,
+                    hashTypes,
+                    cdHashes);
                 blobs.Add((CodeDirectorySpecialSlot.CmsWrapper, cmsWrapperBlob));
 
                 /// TODO: Hic sunt leones (all code below)

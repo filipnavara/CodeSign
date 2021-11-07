@@ -28,6 +28,7 @@ namespace Melanzana.CodeSign.Blobs
 
         public static byte[] Create(
             X509Certificate2? developerCertificate,
+            AsymmetricAlgorithm? privateKey,
             byte[] dataToSign,
             HashType[] hashTypes,
             byte[][] cdHashes)
@@ -73,7 +74,9 @@ namespace Melanzana.CodeSign.Blobs
                 }
             }
 
-            var cmsSigner = new CmsSigner(developerCertificate);
+            var cmsSigner = privateKey == null ?
+                new CmsSigner(developerCertificate) :
+                new CmsSigner(SubjectIdentifierType.IssuerAndSerialNumber, developerCertificate, privateKey);
             cmsSigner.Certificates.AddRange(certificatesList);
             cmsSigner.IncludeOption = X509IncludeOption.None;
 

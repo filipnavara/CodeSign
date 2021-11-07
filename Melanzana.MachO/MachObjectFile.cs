@@ -70,6 +70,48 @@ namespace Melanzana.MachO
             }
         }
 
+        /// <summary>
+        /// Gets a stream for a given part of range of the file.
+        /// </summary>
+        /// <remarks>
+        /// The range must be fully contained in a single section or segment with no sections.
+        /// Accessing file header or link commands through this API is currently not supported.
+        /// </remarks>
+        public Stream GetStreamAtFileOffset(uint fileOffset, uint fileSize)
+        {
+            // FIXME: Should we dispose the original stream? At the moment it would be no-op
+            // anyway since it's always SliceStream or UnclosableMemoryStream.
+
+            foreach (var segment in LoadCommands.OfType<MachSegment>())
+            {
+                if (fileOffset >= segment.FileOffset &&
+                    fileOffset <= segment.FileOffset + segment.FileSize)
+                {
+                    if (segment.Sections.Count == 0)
+                    {
+                        return segment.GetReadStream().Slice(
+                            (long)(fileOffset - segment.FileOffset),
+                            fileSize);
+                    }
+
+                    foreach (var section in segment.Sections)
+                    {
+                        if (fileOffset >= section.FileOffset &&
+                            fileOffset <= section.FileOffset + section.Size)
+                        {
+                            return section.GetReadStream().Slice(
+                                (long)(fileOffset - section.FileOffset),
+                                fileSize);
+                        }
+                    }
+
+                    return Stream.Null;
+                }
+            }
+
+            return Stream.Null;
+        }
+
         public Stream GetOriginalStream()
         {
             if (stream == null)

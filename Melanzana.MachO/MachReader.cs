@@ -191,6 +191,19 @@ namespace Melanzana.MachO
             return buildVersion;
         }
 
+        private static MachSymbolTable ReadSymbolTable(ReadOnlySpan<byte> loadCommandPtr, bool isLittleEndian)
+        {
+            var symbolTableHeader = SymbolTableCommandHeader.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), isLittleEndian, out var _);
+
+            return new MachSymbolTable
+            {
+                SymbolTableOffset = symbolTableHeader.SymbolTableOffset,
+                NumberOfSymbols = symbolTableHeader.NumberOfSymbols,
+                StringTableOffset = symbolTableHeader.StringTableOffset,
+                StringTableSize = symbolTableHeader.StringTableSize,
+            };
+        }
+
         private static MachObjectFile ReadSingle(FatArchHeader? fatArchHeader, MachMagic magic, Stream stream)
         {
             Span<byte> headerBuffer = stackalloc byte[Math.Max(MachHeader.BinarySize, MachHeader64.BinarySize)];
@@ -255,11 +268,12 @@ namespace Melanzana.MachO
                     MachLoadCommandType.LoadWeakDylib => ReadDylibCommand<MachLoadWeakDylibCommand>(loadCommandPtr, loadCommandHeader.CommandSize, isLittleEndian),
                     MachLoadCommandType.ReexportDylib => ReadDylibCommand<MachReexportDylibCommand>(loadCommandPtr, loadCommandHeader.CommandSize, isLittleEndian),
                     MachLoadCommandType.Main => ReadMainCommand(loadCommandPtr, isLittleEndian),
-                    MachLoadCommandType.VersionMinMacOS => ReadVersionMinCommand<MachBuildVersionMacOS>(loadCommandPtr, isLittleEndian),
-                    MachLoadCommandType.VersionMinIPhoneOS => ReadVersionMinCommand<MachBuildVersionIOS>(loadCommandPtr, isLittleEndian),
-                    MachLoadCommandType.VersionMinTvOS => ReadVersionMinCommand<MachBuildVersionTvOS>(loadCommandPtr, isLittleEndian),
-                    MachLoadCommandType.VersionMinWatchOS => ReadVersionMinCommand<MachBuildVersionWatchOS>(loadCommandPtr, isLittleEndian),
+                    MachLoadCommandType.VersionMinMacOS => ReadVersionMinCommand<MachVersionMinMacOS>(loadCommandPtr, isLittleEndian),
+                    MachLoadCommandType.VersionMinIPhoneOS => ReadVersionMinCommand<MachVersionMinIOS>(loadCommandPtr, isLittleEndian),
+                    MachLoadCommandType.VersionMinTvOS => ReadVersionMinCommand<MachVersionMinTvOS>(loadCommandPtr, isLittleEndian),
+                    MachLoadCommandType.VersionMinWatchOS => ReadVersionMinCommand<MachVersionMinWatchOS>(loadCommandPtr, isLittleEndian),
                     MachLoadCommandType.BuildVersion => ReadBuildVersion(loadCommandPtr, isLittleEndian),
+                    MachLoadCommandType.SymbolTable => ReadSymbolTable(loadCommandPtr, isLittleEndian),
                     _ => new MachCustomLoadCommand(loadCommandHeader.CommandType, loadCommandPtr.Slice(LoadCommandHeader.BinarySize, (int)loadCommandHeader.CommandSize - LoadCommandHeader.BinarySize).ToArray()),
                 });
                 loadCommandPtr = loadCommandPtr.Slice((int)loadCommandHeader.CommandSize);

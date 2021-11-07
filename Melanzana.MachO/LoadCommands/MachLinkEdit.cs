@@ -1,4 +1,4 @@
-using Melanzana.MachO.BinaryFormat;
+using System.Diagnostics;
 
 namespace Melanzana.MachO
 {
@@ -7,5 +7,11 @@ namespace Melanzana.MachO
         public uint FileOffset { get; set; }
 
         public uint FileSize { get; set; }
+
+        internal void Validate(MachSegment linkEditSegment)
+        {
+            Debug.Assert(FileOffset >= linkEditSegment.FileOffset);
+            Debug.Assert(FileOffset + FileSize <= linkEditSegment.FileOffset + linkEditSegment.FileSize);
+        }
     }
 }

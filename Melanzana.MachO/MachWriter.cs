@@ -238,6 +238,27 @@ namespace Melanzana.MachO
             }
         }
 
+        public static void WriteSymbolTableCommand(Stream stream, MachSymbolTable symbolTable, bool isLittleEndian)
+        {
+            WriteLoadCommandHeader(
+                stream,
+                MachLoadCommandType.SymbolTable,
+                LoadCommandHeader.BinarySize + SymbolTableCommandHeader.BinarySize,
+                isLittleEndian);
+
+            Span<byte> symbolTableHeaderBuffer = stackalloc byte[SymbolTableCommandHeader.BinarySize];
+            var symbolTableHeader = new SymbolTableCommandHeader
+            {
+                SymbolTableOffset = symbolTable.SymbolTableOffset,
+                NumberOfSymbols = symbolTable.NumberOfSymbols,
+                StringTableOffset = symbolTable.StringTableOffset,
+                StringTableSize = symbolTable.StringTableSize,
+            };
+            symbolTableHeader.Write(symbolTableHeaderBuffer, isLittleEndian, out var _);
+            stream.Write(symbolTableHeaderBuffer);
+        }
+
+
         public static void Write(Stream stream, MachObjectFile objectFile)
         {
             long initialOffset = stream.Position;
@@ -268,11 +289,12 @@ namespace Melanzana.MachO
                     case MachLoadWeakDylibCommand loadWeakDylibCommand: WriteDylibCommand(loadCommandsStream, MachLoadCommandType.LoadWeakDylib, loadWeakDylibCommand, isLittleEndian, objectFile.Is64Bit); break;
                     case MachReexportDylibCommand reexportDylibCommand: WriteDylibCommand(loadCommandsStream, MachLoadCommandType.ReexportDylib, reexportDylibCommand, isLittleEndian, objectFile.Is64Bit); break;
                     case MachEntrypointCommand entrypointCommand: WriteMainCommand(loadCommandsStream, entrypointCommand, isLittleEndian); break;
-                    case MachBuildVersionMacOS macOSBuildVersion: WriteVersionMinCommand(loadCommandsStream, MachLoadCommandType.VersionMinMacOS, macOSBuildVersion, isLittleEndian); break;
-                    case MachBuildVersionIOS iOSBuildVersion: WriteVersionMinCommand(loadCommandsStream, MachLoadCommandType.VersionMinIPhoneOS, iOSBuildVersion, isLittleEndian); break;
-                    case MachBuildVersionTvOS tvOSBuildVersion: WriteVersionMinCommand(loadCommandsStream, MachLoadCommandType.VersionMinTvOS, tvOSBuildVersion, isLittleEndian); break;
-                    case MachBuildVersionWatchOS watchOSBuildVersion: WriteVersionMinCommand(loadCommandsStream, MachLoadCommandType.VersionMinWatchOS, watchOSBuildVersion, isLittleEndian); break;
+                    case MachVersionMinMacOS macOSBuildVersion: WriteVersionMinCommand(loadCommandsStream, MachLoadCommandType.VersionMinMacOS, macOSBuildVersion, isLittleEndian); break;
+                    case MachVersionMinIOS iOSBuildVersion: WriteVersionMinCommand(loadCommandsStream, MachLoadCommandType.VersionMinIPhoneOS, iOSBuildVersion, isLittleEndian); break;
+                    case MachVersionMinTvOS tvOSBuildVersion: WriteVersionMinCommand(loadCommandsStream, MachLoadCommandType.VersionMinTvOS, tvOSBuildVersion, isLittleEndian); break;
+                    case MachVersionMinWatchOS watchOSBuildVersion: WriteVersionMinCommand(loadCommandsStream, MachLoadCommandType.VersionMinWatchOS, watchOSBuildVersion, isLittleEndian); break;
                     case MachBuildVersion buildVersion: WriteBuildVersion(loadCommandsStream, buildVersion, isLittleEndian); break;
+                    case MachSymbolTable symbolTable: WriteSymbolTableCommand(loadCommandsStream, symbolTable, isLittleEndian); break;
                     case MachCustomLoadCommand customLoadCommand:
                         WriteLoadCommandHeader(loadCommandsStream, customLoadCommand.Type, customLoadCommand.Data.Length + LoadCommandHeader.BinarySize, isLittleEndian);
                         loadCommandsStream.Write(customLoadCommand.Data);

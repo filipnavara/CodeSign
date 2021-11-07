@@ -1,6 +1,6 @@
 namespace Melanzana.MachO
 {
-    public class MachBuildVersionWatchOS : MachBuildVersionBase
+    public class MachVersionMinWatchOS : MachBuildVersionBase
     {
         public override MachPlatform Platform => MachPlatform.WatchOS;
     }

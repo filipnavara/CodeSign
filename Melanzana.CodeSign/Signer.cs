@@ -231,7 +231,7 @@ namespace Melanzana.CodeSign
 
             if (bundle.MainExecutable != null)
             {
-                SignMachO(Path.Combine(bundle.BundlePath, bundle.MainExecutable), bundle.BundleIdentifier, resourceSealBytes);
+                SignMachO(bundle.MainExecutable, bundle.BundleIdentifier, resourceSealBytes);
             }
         }
 
@@ -305,11 +305,6 @@ namespace Melanzana.CodeSign
                 }
                 else
                 {
-                    if (resourceAndRule.Rule.IsOptional)
-                    {
-                        files2Value.Add("optional", true);
-                    }
-
                     using (var fileStream = File.OpenRead(resourceAndRule.Info.FullName))
                     {
                         int bytesRead;
@@ -322,6 +317,11 @@ namespace Melanzana.CodeSign
 
                     files2Value.Add("hash", new NSData(sha1.GetHashAndReset()));
                     files2Value.Add("hash2", new NSData(sha256.GetHashAndReset()));
+
+                    if (resourceAndRule.Rule.IsOptional)
+                    {
+                        files2Value.Add("optional", true);
+                    }
                 }
 
                 files2.Add(resourceAndRule.Path, files2Value);
@@ -333,13 +333,15 @@ namespace Melanzana.CodeSign
 
             var rules = BuildResourceRulesPList(resourceBuilder.Rules);
             var files = new NSDictionary();
-            foreach (var resourceAndRule in resourceBuilder.Scan(bundle.BundlePath))
+            foreach (var resourceAndRule in resourceBuilder.Scan(bundle.ContentsPath))
             {
+                NSData hash;
+
                 Debug.Assert(resourceAndRule.Info is FileInfo);
 
                 if (files2.TryGetValue(resourceAndRule.Path, out var files2Value))
                 {
-                    files.Add(resourceAndRule.Path, ((NSDictionary)files2Value)["hash"]);
+                    hash = (NSData)((NSDictionary)files2Value)["hash"];
                 }
                 else
                 {
@@ -352,7 +354,19 @@ namespace Melanzana.CodeSign
                         }
                     }
 
-                    files.Add(resourceAndRule.Path, new NSData(sha1.GetHashAndReset()));
+                    hash = new NSData(sha1.GetHashAndReset());
+                }
+
+                if (resourceAndRule.Rule.IsOptional)
+                {
+                    var filesValue = new NSDictionary(2);
+                    filesValue.Add("hash", hash);
+                    filesValue.Add("optional", true);
+                    files.Add(resourceAndRule.Path, filesValue);
+                }
+                else
+                {
+                    files.Add(resourceAndRule.Path, hash);
                 }
             }
 

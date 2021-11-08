@@ -42,14 +42,14 @@ namespace Melanzana.CodeSign
                 {
                     if (hasContents) // macOS
                     {
-                        mainExecutable = Path.Combine("Contents", "MacOS", (string)bundleExecutable);
+                        mainExecutable = Path.Combine("MacOS", (string)bundleExecutable);
                     }
                     else
                     {
                         mainExecutable = (string)bundleExecutable;
                     }
                     
-                    if (!File.Exists(Path.Combine(path, mainExecutable)))
+                    if (!File.Exists(Path.Combine(ContentsPath, mainExecutable)))
                     {
                         mainExecutable = null;
                     }
@@ -62,7 +62,7 @@ namespace Melanzana.CodeSign
             }
         }
 
-        public string? MainExecutable => mainExecutable;
+        public string? MainExecutable => mainExecutable != null ? Path.Combine(ContentsPath, mainExecutable) : null;
 
         public string? BundleIdentifier => bundleIdentifier;
 

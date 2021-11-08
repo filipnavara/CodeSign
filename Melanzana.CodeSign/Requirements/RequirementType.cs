@@ -1,6 +1,6 @@
-namespace Melanzana.CodeSign.Blobs
+namespace Melanzana.CodeSign.Requirements
 {
-    enum RequirementType : uint
+    public enum RequirementType : uint
     {
         Host = 1u,
         Guest,

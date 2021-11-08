@@ -14,7 +14,8 @@ namespace Melanzana.CodeSign.Requirements
         public static Expression True { get; } = new SimpleExpression(ExpressionOperation.True);
         public static Expression Ident(string identifier) => new StringExpression(ExpressionOperation.Ident, identifier);
         public static Expression AppleAnchor { get; } = new SimpleExpression(ExpressionOperation.AppleAnchor);
-        public static Expression AnchorHash(byte[] anchorHash) => new DataExpression(ExpressionOperation.AnchorHash, anchorHash);
+        // FIXME: public static Expression AnchorHash(byte[] anchorHash) => new DataExpression(ExpressionOperation.AnchorHash, anchorHash);
+        // AnchorHash
         // InfoKeyValue
         public static Expression And(Expression left, Expression right) => new BinaryOperatorExpression(ExpressionOperation.And, left, right);
         public static Expression Or(Expression left, Expression right) => new BinaryOperatorExpression(ExpressionOperation.Or, left, right);
@@ -63,6 +64,20 @@ namespace Melanzana.CodeSign.Requirements
                 BinaryPrimitives.WriteUInt32BigEndian(buffer, (uint)op);
                 bytesWritten = 4;
             }
+
+            public override string ToString()
+            {
+                return op switch {
+                    ExpressionOperation.False => "never",
+                    ExpressionOperation.True => "always",
+                    ExpressionOperation.AppleAnchor => "apple anchor",
+                    ExpressionOperation.AppleGenericAnchor => "apple generic anchor",
+                    ExpressionOperation.TrustedCerts => "anchor trusted",
+                    ExpressionOperation.Notarized => "notarized",
+                    ExpressionOperation.LegacyDevID => "legacy",
+                    _ => "unknown",
+                };
+            }
         }
 
         class BinaryOperatorExpression : Expression
@@ -87,6 +102,15 @@ namespace Melanzana.CodeSign.Requirements
                 right.Write(buffer.Slice(4 + bytesWrittenLeft), out var bytesWrittenRight);
                 bytesWritten = 4 + bytesWrittenLeft + bytesWrittenRight;
             }
+
+            public override string ToString()
+            {
+                return op switch {
+                    ExpressionOperation.And => $"({left} and {right})",
+                    ExpressionOperation.Or => $"({left} or {right})",
+                    _ => "unknown",
+                };
+            }
         }
 
         class UnaryOperatorExpression : Expression
@@ -107,6 +131,14 @@ namespace Melanzana.CodeSign.Requirements
                 BinaryPrimitives.WriteUInt32BigEndian(buffer, (uint)op);
                 inner.Write(buffer.Slice(4), out var bytesWrittenInner);
                 bytesWritten = 4 + bytesWrittenInner;
+            }
+
+            public override string ToString()
+            {
+                return op switch {
+                    ExpressionOperation.Not => $"! {inner}",
+                    _ => "unknown",
+                };
             }
         }
 
@@ -132,6 +164,14 @@ namespace Melanzana.CodeSign.Requirements
                 buffer.Slice(8 + opStringBytes.Length, Align(opStringBytes.Length) - opStringBytes.Length).Fill((byte)0);
                 bytesWritten = 8 + Align(opStringBytes.Length);
             }
+
+            public override string ToString()
+            {
+                return op switch {
+                    ExpressionOperation.Ident => $"identifier \"{opString}\"", // FIXME: Escaping
+                    _ => "unknown",
+                };
+            }
         }
 
         class DataExpression : Expression
@@ -152,6 +192,14 @@ namespace Melanzana.CodeSign.Requirements
                 BinaryPrimitives.WriteUInt32BigEndian(buffer, (uint)op);
                 opData.CopyTo(buffer.Slice(4, opData.Length));
                 bytesWritten = 4 + opData.Length;
+            }
+
+            public override string ToString()
+            {
+                return op switch {
+                    ExpressionOperation.CDHash => $"cdhash \"{Convert.ToHexString(opData)}\"",
+                    _ => "unknown",
+                };
             }
         }
 
@@ -208,6 +256,17 @@ namespace Melanzana.CodeSign.Requirements
                     buffer.Slice(4 + matchValueBytes.Length, Align(matchValueBytes.Length) - matchValueBytes.Length).Fill((byte)0);
                     bytesWritten += 4 + Align(matchValueBytes.Length);
                 }
+            }
+
+
+            public override string ToString()
+            {
+                // TODO
+                return op.ToString();
+                /*return op switch {
+                    ExpressionOperation.CertField => $"certificate {certificateIndex} [{}] \"{Convert.ToHexString(opData)}\"",
+                    _ => "unknown",
+                };*/
             }
         }
     }

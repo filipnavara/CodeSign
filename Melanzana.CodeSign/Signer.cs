@@ -7,6 +7,7 @@ using System.Text;
 using Melanzana.CodeSign.Blobs;
 using Melanzana.MachO;
 using Melanzana.Streams;
+using Melanzana.CodeSign.Requirements;
 
 namespace Melanzana.CodeSign
 {
@@ -70,9 +71,9 @@ namespace Melanzana.CodeSign
 
             if (codeSignOptions.DeveloperCertificate != null)
             {
-                requirementsBlob = RequirementsBlob.CreateDefault(
+                requirementsBlob = RequirementSet.CreateDefault(
                     bundleIdentifier,
-                    codeSignOptions.DeveloperCertificate.GetNameInfo(X509NameType.SimpleName, false));
+                    codeSignOptions.DeveloperCertificate.GetNameInfo(X509NameType.SimpleName, false)).AsBlob();
             }
 
             if (codeSignOptions.Entitlements is Entitlements entitlements)

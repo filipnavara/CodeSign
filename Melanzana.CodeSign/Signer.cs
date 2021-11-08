@@ -226,8 +226,8 @@ namespace Melanzana.CodeSign
             var resourceSeal = BuildResourceSeal(bundle);
             var resourceSealBytes = Encoding.UTF8.GetBytes(resourceSeal.ToXmlPropertyList());
 
-            Directory.CreateDirectory(Path.Combine(bundle.BundlePath, "_CodeSignature"));
-            File.WriteAllBytes(Path.Combine(bundle.BundlePath, "_CodeSignature", "CodeResources"), resourceSealBytes);
+            Directory.CreateDirectory(Path.Combine(bundle.ContentsPath, "_CodeSignature"));
+            File.WriteAllBytes(Path.Combine(bundle.ContentsPath, "_CodeSignature", "CodeResources"), resourceSealBytes);
 
             if (bundle.MainExecutable != null)
             {

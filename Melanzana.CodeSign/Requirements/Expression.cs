@@ -38,7 +38,7 @@ namespace Melanzana.CodeSign.Requirements
         // CertFieldDate,
         public static Expression LegacyDevID { get; } = new SimpleExpression(ExpressionOperation.LegacyDevID);
 
-        private int Align(int size) => (size + 3) & ~3;
+        private static int Align(int size) => (size + 3) & ~3;
 
         private static byte[] GetOidBytes(string oid)
         {
@@ -163,7 +163,7 @@ namespace Melanzana.CodeSign.Requirements
             byte[] certificateFieldBytes;
             ExpressionMatchType matchType;
             object? matchValue;
-            byte[] matchValueBytes;
+            byte[]? matchValueBytes;
 
             public CertExpression(
                 ExpressionOperation op,
@@ -183,13 +183,13 @@ namespace Melanzana.CodeSign.Requirements
                     (byte[])certificateField;
                 matchValueBytes = matchValue is string matchValueString ?
                     Encoding.UTF8.GetBytes(matchValueString) :
-                    (byte[])matchValue;
+                    matchValue as byte[];
             }
 
             public override int Size =>
                 16 +
                 Align(certificateFieldBytes.Length) +
-                (matchValue != null ? 4 + Align(matchValueBytes.Length) : 0);
+                (matchValueBytes != null ? 4 + Align(matchValueBytes.Length) : 0);
 
             public override void Write(Span<byte> buffer, out int bytesWritten)
             {
@@ -201,7 +201,7 @@ namespace Melanzana.CodeSign.Requirements
                 bytesWritten = 12 + Align(certificateFieldBytes.Length);
                 BinaryPrimitives.WriteUInt32BigEndian(buffer.Slice(bytesWritten), (uint)matchType);
                 bytesWritten += 4;
-                if (matchValue != null)
+                if (matchValueBytes != null)
                 {
                     BinaryPrimitives.WriteInt32BigEndian(buffer.Slice(bytesWritten), matchValueBytes.Length);
                     matchValueBytes.CopyTo(buffer.Slice(4 + bytesWritten, matchValueBytes.Length));

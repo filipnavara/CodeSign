@@ -60,6 +60,15 @@ namespace Melanzana.CodeSign
                     this.bundleIdentifier = (string)bundleIdentifier;
                 }
             }
+            else if (!hasContents)
+            {
+                // FIXME: Quick hack to get framework executables
+                var guessedName = Path.GetFileNameWithoutExtension(path);
+                if (File.Exists(Path.Combine(BundlePath, guessedName)))
+                {
+                    mainExecutable = guessedName;
+                }
+            }
         }
 
         public string? MainExecutable => mainExecutable != null ? Path.Combine(ContentsPath, mainExecutable) : null;

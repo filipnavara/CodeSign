@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Diagnostics;
 using Melanzana.CodeSign.Blobs;
 
 namespace Melanzana.CodeSign.Requirements
@@ -11,6 +12,17 @@ namespace Melanzana.CodeSign.Requirements
         }
 
         public Expression Expression { get; private set; }
+
+        public static Requirement FromBlob(ReadOnlySpan<byte> blob)
+        {
+            var blobMagic = BinaryPrimitives.ReadUInt32BigEndian(blob.Slice(0, 4));
+            var blobSize = BinaryPrimitives.ReadInt32BigEndian(blob.Slice(4, 4));
+            var matchType = BinaryPrimitives.ReadUInt32BigEndian(blob.Slice(8, 4));
+            Debug.Assert(blobMagic == (uint)BlobMagic.Requirement);
+            Debug.Assert(blobSize == blob.Length);
+            Debug.Assert(matchType == 1u); // Expression
+            return new Requirement(Expression.FromBlob(blob.Slice(12)));
+        }
 
         public byte[] AsBlob()
         {

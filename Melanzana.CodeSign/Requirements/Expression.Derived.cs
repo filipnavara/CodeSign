@@ -29,8 +29,8 @@ namespace Melanzana.CodeSign.Requirements
                 return op switch {
                     ExpressionOperation.False => "never",
                     ExpressionOperation.True => "always",
-                    ExpressionOperation.AppleAnchor => "apple anchor",
-                    ExpressionOperation.AppleGenericAnchor => "apple generic anchor",
+                    ExpressionOperation.AppleAnchor => "anchor apple",
+                    ExpressionOperation.AppleGenericAnchor => "anchor apple generic",
                     ExpressionOperation.TrustedCerts => "anchor trusted",
                     ExpressionOperation.Notarized => "notarized",
                     ExpressionOperation.LegacyDevID => "legacy",
@@ -334,10 +334,10 @@ namespace Melanzana.CodeSign.Requirements
             public override string ToString()
             {
                 return op switch {
-                    ExpressionOperation.CertField => $"certificate {CertificateSlotToString(certificateIndex)} [{Encoding.ASCII.GetString(certificateField)}] {base.ToString()}",
-                    ExpressionOperation.CertGeneric => $"certificate {CertificateSlotToString(certificateIndex)} [field.{GetOidString(certificateField)}] {base.ToString()}",
-                    ExpressionOperation.CertPolicy => $"certificate {CertificateSlotToString(certificateIndex)} [policy.{GetOidString(certificateField)}] {base.ToString()}",
-                    ExpressionOperation.CertFieldDate => $"certificate {CertificateSlotToString(certificateIndex)} [timestamp.{GetOidString(certificateField)}] {base.ToString()}",
+                    ExpressionOperation.CertField => $"certificate {CertificateSlotToString(certificateIndex)}[{Encoding.ASCII.GetString(certificateField)}] {base.ToString()}",
+                    ExpressionOperation.CertGeneric => $"certificate {CertificateSlotToString(certificateIndex)}[field.{GetOidString(certificateField)}] {base.ToString()}",
+                    ExpressionOperation.CertPolicy => $"certificate {CertificateSlotToString(certificateIndex)}[policy.{GetOidString(certificateField)}] {base.ToString()}",
+                    ExpressionOperation.CertFieldDate => $"certificate {CertificateSlotToString(certificateIndex)}[timestamp.{GetOidString(certificateField)}] {base.ToString()}",
                     _ => "unknown",
                 };
             }

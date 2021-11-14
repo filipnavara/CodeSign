@@ -1,8 +1,3 @@
-using System.Buffers.Binary;
-using System.Text;
-using System.Formats.Asn1;
-using Melanzana.MachO;
-
 namespace Melanzana.CodeSign.Requirements
 {
     public abstract partial class Expression

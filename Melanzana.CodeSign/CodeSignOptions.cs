@@ -28,5 +28,10 @@ namespace Melanzana.CodeSign
         /// Gets or sets the entitlements to be embedded in the signature.
         /// </summary>
         public Entitlements? Entitlements { get; set; }
+
+        /// <summmary>
+        /// Gets or sets whether the nested exectuables should be signed.
+        /// </summary>
+        public bool Deep { get; set; }
     }
 }

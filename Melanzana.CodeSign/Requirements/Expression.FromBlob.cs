@@ -1,6 +1,5 @@
 using System.Buffers.Binary;
 using System.Text;
-using System.Formats.Asn1;
 using Melanzana.MachO;
 
 namespace Melanzana.CodeSign.Requirements
@@ -25,7 +24,7 @@ namespace Melanzana.CodeSign.Requirements
             return null;
         }
 
-        private static Expression FromBinary(ReadOnlySpan<byte> expr, out int bytesRead)
+        private static Expression FromBlob(ReadOnlySpan<byte> expr, out int bytesRead)
         {
             if (expr.Length == 0)
                 throw new NotImplementedException();
@@ -63,14 +62,14 @@ namespace Melanzana.CodeSign.Requirements
                     return InfoKeyValue(Encoding.ASCII.GetString(field), Encoding.ASCII.GetString(value));
 
                 case ExpressionOperation.And:
-                    var left = FromBinary(expr.Slice(4), out var leftBytesRead);
-                    var right = FromBinary(expr.Slice(4 + leftBytesRead), out bytesRead);
+                    var left = FromBlob(expr.Slice(4), out var leftBytesRead);
+                    var right = FromBlob(expr.Slice(4 + leftBytesRead), out bytesRead);
                     bytesRead += 4 + leftBytesRead;
                     return And(left, right);
 
                 case ExpressionOperation.Or:
-                    left = FromBinary(expr.Slice(4), out leftBytesRead);
-                    right = FromBinary(expr.Slice(4 + leftBytesRead), out bytesRead);
+                    left = FromBlob(expr.Slice(4), out leftBytesRead);
+                    right = FromBlob(expr.Slice(4 + leftBytesRead), out bytesRead);
                     bytesRead += 4 + leftBytesRead;
                     return Or(left, right);
 
@@ -80,7 +79,7 @@ namespace Melanzana.CodeSign.Requirements
                     return CDHash(hash);
 
                 case ExpressionOperation.Not:
-                    var inner = FromBinary(expr.Slice(4), out bytesRead);
+                    var inner = FromBlob(expr.Slice(4), out bytesRead);
                     bytesRead += 4;
                     return Not(inner);
 
@@ -150,9 +149,9 @@ namespace Melanzana.CodeSign.Requirements
             }
         }
 
-        public static Expression FromBinary(ReadOnlySpan<byte> expr)
+        public static Expression FromBlob(ReadOnlySpan<byte> expr)
         {
-            return FromBinary(expr, out _);
+            return FromBlob(expr, out _);
         }
     }
 }

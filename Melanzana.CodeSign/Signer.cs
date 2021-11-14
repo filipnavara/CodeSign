@@ -297,11 +297,18 @@ namespace Melanzana.CodeSign
 
                 if (resourceAndRule.Rule.IsNested)
                 {
-                    // TODO: Nested signature on macOS (eg. Framework)
-                    // FIXME: We need to get cdhash and designated requirements and write that into the seal
-                    Sign(resourceAndRule.Info.FullName);
-                    //throw new NotImplementedException();
-                    
+                    if (codeSignOptions.Deep)
+                    {
+                        Sign(resourceAndRule.Info.FullName);
+                    }
+
+                    var nestedInfo = ReadNested(resourceAndRule.Info.FullName);
+                    if (nestedInfo.HasValue)
+                    {
+                        files2Value.Add("cdhash", new NSData(nestedInfo.Value.CodeDirectoryHash));
+                        if (nestedInfo.Value.DesignatedRequirement != null)
+                            files2Value.Add("requirement", nestedInfo.Value.DesignatedRequirement.ToString());
+                    }
                 }
                 else
                 {
@@ -372,6 +379,77 @@ namespace Melanzana.CodeSign
 
             // Write down the rules and hashes
             return new NSDictionary { { "files", files }, { "files2", files2 }, { "rules", rules }, { "rules2", rules2 } };
+        }
+
+        private static (Requirement? DesignatedRequirement, byte[] CodeDirectoryHash)? ReadNestedMachO(string executablePath)
+        {
+            using var f = File.OpenRead(executablePath);
+            var objectFile = MachReader.Read(f).First();
+            var codeSignature = objectFile.LoadCommands.OfType<MachCodeSignature>().FirstOrDefault();
+            if (codeSignature == null)
+                return null;
+
+            var codeSignatureStream = objectFile.GetStreamAtFileOffset(codeSignature.FileOffset, codeSignature.FileSize);
+            var superBlob = new byte[codeSignature.FileSize];
+            codeSignatureStream.ReadFully(superBlob);
+
+            var superBlobMagic = BinaryPrimitives.ReadUInt32BigEndian(superBlob.AsSpan(0, 4));
+            var superBlobSize = BinaryPrimitives.ReadUInt32BigEndian(superBlob.AsSpan(4, 4));
+            var superBlobCount = BinaryPrimitives.ReadInt32BigEndian(superBlob.AsSpan(8, 4));
+
+            Debug.Assert(superBlobMagic == (uint)BlobMagic.EmbeddedSignature);
+            var slotOffsetDictionary = new Dictionary<CodeDirectorySpecialSlot, int>(superBlobCount);
+
+            for (int i = 0; i < superBlobCount; i++)
+            {
+                var slot = (CodeDirectorySpecialSlot)BinaryPrimitives.ReadUInt32BigEndian(superBlob.AsSpan(i * 8 + 12, 4));
+                var slotOffset = BinaryPrimitives.ReadInt32BigEndian(superBlob.AsSpan(i * 8 + 16, 4));
+                slotOffsetDictionary[slot] = slotOffset;
+            }
+
+            Requirement? designatedRequirement = null;
+            if (slotOffsetDictionary.TryGetValue(CodeDirectorySpecialSlot.Requirements, out var requirementsOffset))
+            {
+                var requirementsSize = BinaryPrimitives.ReadInt32BigEndian(superBlob.AsSpan(requirementsOffset + 4, 4));
+                var requirementSet = RequirementSet.FromBlob(superBlob.AsSpan(requirementsOffset, requirementsSize));
+                requirementSet.TryGetValue(RequirementType.Designated, out designatedRequirement);
+            }
+
+            // FIXME: Get correct CD
+            if (slotOffsetDictionary.TryGetValue(CodeDirectorySpecialSlot.AlternativeCodeDirectory, out var codeDirectoryOffset) ||
+                slotOffsetDictionary.TryGetValue(CodeDirectorySpecialSlot.CodeDirectory, out codeDirectoryOffset))
+            {
+                var codeDirectorySize = BinaryPrimitives.ReadInt32BigEndian(superBlob.AsSpan(codeDirectoryOffset + 4, 4));
+                var codeDirectoryBlob = superBlob.AsSpan(codeDirectoryOffset, codeDirectorySize);
+                var codeDirectoryHeader = CodeDirectoryBaselineHeader.Read(codeDirectoryBlob, out _);
+                var hasher = codeDirectoryHeader.HashType.GetIncrementalHash();
+                hasher.AppendData(codeDirectoryBlob);
+                return (designatedRequirement, hasher.GetHashAndReset().AsSpan(0, 20).ToArray());
+            }
+
+            return null;
+        }
+
+        private static (Requirement? DesignatedRequirement, byte[] CodeDirectoryHash)? ReadNestedBundle(string bundlePath)
+        {
+            var bundle = new Bundle(bundlePath);
+            return bundle.MainExecutable != null ? ReadNestedMachO(bundle.MainExecutable) : null;
+        }
+
+        private static (Requirement? DesignatedRequirement, byte[] CodeDirectoryHash)? ReadNested(string path)
+        {
+            var attributes = File.GetAttributes(path);
+
+            // Assume a directory is a bundle
+            if (attributes.HasFlag(FileAttributes.Directory))
+            {
+                return ReadNestedBundle(path);
+            }
+            else
+            {
+                // TODO: Add support for signing regular files, etc.
+                return ReadNestedMachO(path);
+            }
         }
     }
 }

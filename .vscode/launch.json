@@ -11,7 +11,7 @@
             "preLaunchTask": "build",
             // If you have changed target frameworks, make sure to update the program path.
             "program": "${workspaceFolder}/codesign/bin/Debug/net6.0/codesign.dll",
-            "args": ["sign", "D69F66D03D0DD5E7B2270300E60844898B70A213", "/Users/filipnavara/Downloads/gc/MailClient.Mobile.iOS.app"],
+            "args": ["sign", "D69F66D03D0DD5E7B2270300E60844898B70A213", "/Users/filipnavara/Projects/codesign/Airmail.app"],
             "cwd": "${workspaceFolder}",
             // For more information about the 'console' field, see https://aka.ms/VSCode-CS-LaunchJson-Console
             "console": "internalConsole",

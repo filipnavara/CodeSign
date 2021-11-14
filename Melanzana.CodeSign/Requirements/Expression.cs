@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Text;
 using System.Formats.Asn1;
+using Melanzana.MachO;
 
 namespace Melanzana.CodeSign.Requirements
 {
@@ -15,7 +16,8 @@ namespace Melanzana.CodeSign.Requirements
         public static Expression Ident(string identifier) => new StringExpression(ExpressionOperation.Ident, identifier);
         public static Expression AppleAnchor { get; } = new SimpleExpression(ExpressionOperation.AppleAnchor);
         public static Expression AnchorHash(int certificateIndex, byte[] anchorHash) => new AnchorHashExpression(certificateIndex, anchorHash);
-        // InfoKeyValue
+        public static Expression InfoKeyValue(string field, string matchValue)
+            => new InfoKeyValueExpression(field, Encoding.ASCII.GetBytes(matchValue));
         public static Expression And(Expression left, Expression right) => new BinaryOperatorExpression(ExpressionOperation.And, left, right);
         public static Expression Or(Expression left, Expression right) => new BinaryOperatorExpression(ExpressionOperation.Or, left, right);
         public static Expression CDHash(byte[] codeDirectoryHash) => new CDHashExpression(codeDirectoryHash);
@@ -23,8 +25,8 @@ namespace Melanzana.CodeSign.Requirements
         public static Expression InfoKeyField(string field, ExpressionMatchType matchType, string? matchValue = null)
             => new FieldMatchExpression(ExpressionOperation.InfoKeyField, field, matchType, matchValue != null ? Encoding.ASCII.GetBytes(matchValue) : null);
         public static Expression CertField(int certificateIndex, string certificateField, ExpressionMatchType matchType, string? matchValue = null)
-            => new CertExpression(ExpressionOperation.CertField, certificateIndex, certificateField, matchType, matchValue != null ? Encoding.ASCII.GetBytes(matchValue) : null);
-        // TrustedCert,
+            => new CertExpression(ExpressionOperation.CertField, certificateIndex, Encoding.ASCII.GetBytes(certificateField), matchType, matchValue != null ? Encoding.ASCII.GetBytes(matchValue) : null);
+        public static Expression TrustedCert(int certificateIndex) => new TrustedCertExpression(certificateIndex);
         public static Expression TrustedCerts { get; } = new SimpleExpression(ExpressionOperation.TrustedCerts);
         public static Expression CertGeneric(int certificateIndex, string certificateFieldOid, ExpressionMatchType matchType, string? matchValue = null)
             => new CertExpression(ExpressionOperation.CertGeneric, certificateIndex, GetOidBytes(certificateFieldOid), matchType, matchValue != null ? Encoding.ASCII.GetBytes(matchValue) : null);
@@ -33,11 +35,12 @@ namespace Melanzana.CodeSign.Requirements
             => new FieldMatchExpression(ExpressionOperation.EntitlementField, field, matchType, matchValue != null ? Encoding.ASCII.GetBytes(matchValue) : null);
         public static Expression CertPolicy(int certificateIndex, string certificateFieldOid, ExpressionMatchType matchType, string? matchValue = null)
             => new CertExpression(ExpressionOperation.CertPolicy, certificateIndex, GetOidBytes(certificateFieldOid), matchType, matchValue != null ? Encoding.ASCII.GetBytes(matchValue) : null);
-        // NamedAnchor,
-        // NamedCode,
-        // Platform,
+        public static Expression NamedAnchor(string anchorName) => new NamedExpression(ExpressionOperation.NamedAnchor, Encoding.ASCII.GetBytes(anchorName));
+        public static Expression NamedCode(string code) => new NamedExpression(ExpressionOperation.NamedCode, Encoding.ASCII.GetBytes(code));
+        public static Expression Platform(MachPlatform platform) => new PlatformExpression(platform);
         public static Expression Notarized { get; } = new SimpleExpression(ExpressionOperation.Notarized);
-        // CertFieldDate,
+        public static Expression CertFieldDate(int certificateIndex, string certificateFieldOid, ExpressionMatchType matchType, DateTime? matchValue = null)
+            => new CertExpression(ExpressionOperation.CertFieldDate, certificateIndex, GetOidBytes(certificateFieldOid), matchType, matchValue.HasValue ? GetTimestampBytes(matchValue.Value) : null);
         public static Expression LegacyDevID { get; } = new SimpleExpression(ExpressionOperation.LegacyDevID);
 
         private static int Align(int size) => (size + 3) & ~3;
@@ -56,6 +59,20 @@ namespace Melanzana.CodeSign.Requirements
             oidBytes[1] = (byte)oid.Length;
             oid.CopyTo(oidBytes.AsSpan(2));
             return AsnDecoder.ReadObjectIdentifier(oidBytes, AsnEncodingRules.DER, out _);
+        }
+
+        private static byte[] GetTimestampBytes(DateTime dateTime)
+        {
+            long tsSeconds = (long)(dateTime - new DateTime(2001, 1, 1)).TotalSeconds;
+            var buffer = new byte[8];
+            BinaryPrimitives.WriteInt64BigEndian(buffer, tsSeconds);
+            return buffer;
+        }
+
+        private static string GetTimestampString(byte[] dateTime)
+        {
+            var tsSeconds = BinaryPrimitives.ReadInt64BigEndian(dateTime);
+            return new DateTime(2001, 1, 1).AddSeconds(tsSeconds).ToString("yyyyMMddHHmmssZ");
         }
 
         private static string BinaryValueToString(byte[] bytes)
@@ -337,7 +354,11 @@ namespace Melanzana.CodeSign.Requirements
                     ExpressionMatchType.GreaterEqual => $">= {ValueToString(matchValue!)}",
                     ExpressionMatchType.LessEqual => $"<= {ValueToString(matchValue!)}",
                     ExpressionMatchType.GreaterThan => $">= {ValueToString(matchValue!)}",
-                    //ExpressionMatchType.On => $"= {TimestampToString(matchValue!)}",
+                    ExpressionMatchType.On => $"= timestamp \"{GetTimestampString(matchValue!)}\"",
+                    ExpressionMatchType.Before => $"< timestamp \"{GetTimestampString(matchValue!)}\"",
+                    ExpressionMatchType.After => $"> timestamp \"{GetTimestampString(matchValue!)}\"",
+                    ExpressionMatchType.OnOrBefore => $"<= timestamp \"{GetTimestampString(matchValue!)}\"",
+                    ExpressionMatchType.OnOrAfter => $">= timestamp \"{GetTimestampString(matchValue!)}\"",
                     _ => "unknown",
                 };
             }
@@ -392,13 +413,12 @@ namespace Melanzana.CodeSign.Requirements
         {
             private readonly ExpressionOperation op;
             private readonly int certificateIndex;
-            private readonly object certificateField;
-            private readonly byte[] certificateFieldBytes;
+            private readonly byte[] certificateField;
 
             public CertExpression(
                 ExpressionOperation op,
                 int certificateIndex,
-                object certificateField, // string or byte[]
+                byte[] certificateField,
                 ExpressionMatchType matchType,
                 byte[]? matchValue)
                 : base(matchType, matchValue) 
@@ -406,25 +426,21 @@ namespace Melanzana.CodeSign.Requirements
                 this.op = op;
                 this.certificateIndex = certificateIndex;
                 this.certificateField = certificateField;
-
-                certificateFieldBytes = certificateField is string certificateFieldString ? 
-                    Encoding.UTF8.GetBytes(certificateFieldString) :
-                    (byte[])certificateField;
             }
 
             public override int Size =>
                 16 +
-                Align(certificateFieldBytes.Length) +
+                Align(certificateField.Length) +
                 base.Size;
 
             public override void Write(Span<byte> buffer, out int bytesWritten)
             {
                 BinaryPrimitives.WriteUInt32BigEndian(buffer, (uint)op);
                 BinaryPrimitives.WriteInt32BigEndian(buffer.Slice(4), certificateIndex);
-                BinaryPrimitives.WriteInt32BigEndian(buffer.Slice(8), certificateFieldBytes.Length);
-                certificateFieldBytes.CopyTo(buffer.Slice(12, certificateFieldBytes.Length));
-                buffer.Slice(12 + certificateFieldBytes.Length, Align(certificateFieldBytes.Length) - certificateFieldBytes.Length).Fill((byte)0);
-                bytesWritten = 12 + Align(certificateFieldBytes.Length);
+                BinaryPrimitives.WriteInt32BigEndian(buffer.Slice(8), certificateField.Length);
+                certificateField.CopyTo(buffer.Slice(12, certificateField.Length));
+                buffer.Slice(12 + certificateField.Length, Align(certificateField.Length) - certificateField.Length).Fill((byte)0);
+                bytesWritten = 12 + Align(certificateField.Length);
                 base.Write(buffer.Slice(bytesWritten), out var matchExpressionSize);
                 bytesWritten += matchExpressionSize;
             }
@@ -433,12 +449,136 @@ namespace Melanzana.CodeSign.Requirements
             public override string ToString()
             {
                 return op switch {
-                    ExpressionOperation.CertField => $"certificate {CertificateSlotToString(certificateIndex)} [{certificateField}] {base.ToString()}",
-                    ExpressionOperation.CertGeneric => $"certificate {CertificateSlotToString(certificateIndex)} [field.{GetOidString(certificateFieldBytes)}] {base.ToString()}",
-                    ExpressionOperation.CertPolicy => $"certificate {CertificateSlotToString(certificateIndex)} [policy.{GetOidString(certificateFieldBytes)}] {base.ToString()}",
-                    ExpressionOperation.CertFieldDate => $"certificate {CertificateSlotToString(certificateIndex)} [timestamp.{GetOidString(certificateFieldBytes)}] {base.ToString()}",
+                    ExpressionOperation.CertField => $"certificate {CertificateSlotToString(certificateIndex)} [{Encoding.ASCII.GetString(certificateField)}] {base.ToString()}",
+                    ExpressionOperation.CertGeneric => $"certificate {CertificateSlotToString(certificateIndex)} [field.{GetOidString(certificateField)}] {base.ToString()}",
+                    ExpressionOperation.CertPolicy => $"certificate {CertificateSlotToString(certificateIndex)} [policy.{GetOidString(certificateField)}] {base.ToString()}",
+                    ExpressionOperation.CertFieldDate => $"certificate {CertificateSlotToString(certificateIndex)} [timestamp.{GetOidString(certificateField)}] {base.ToString()}",
                     _ => "unknown",
                 };
+            }
+        }
+
+        class InfoKeyValueExpression : Expression
+        {
+            private readonly object field;
+            private readonly byte[] fieldBytes;
+            private readonly byte[] matchValue;
+
+            public InfoKeyValueExpression(
+                string field,
+                byte[] matchValue)
+            {
+                this.field = field;
+                this.matchValue = matchValue;
+
+                fieldBytes = Encoding.ASCII.GetBytes(field);
+            }
+
+            public override int Size =>
+                12 +
+                Align(fieldBytes.Length) +
+                Align(matchValue.Length);
+
+            public override void Write(Span<byte> buffer, out int bytesWritten)
+            {
+                BinaryPrimitives.WriteUInt32BigEndian(buffer.Slice(0, 4), (uint)ExpressionOperation.InfoKeyValue);
+                BinaryPrimitives.WriteInt32BigEndian(buffer.Slice(4, 4), fieldBytes.Length);
+                fieldBytes.CopyTo(buffer.Slice(8, fieldBytes.Length));
+                buffer.Slice(8 + fieldBytes.Length, Align(fieldBytes.Length) - fieldBytes.Length).Fill((byte)0);
+                bytesWritten = 8 + Align(fieldBytes.Length);
+                BinaryPrimitives.WriteInt32BigEndian(buffer.Slice(bytesWritten, 4), matchValue.Length);
+                fieldBytes.CopyTo(buffer.Slice(bytesWritten + 4, matchValue.Length));
+                buffer.Slice(4 + bytesWritten + matchValue.Length, Align(matchValue.Length) - matchValue.Length).Fill((byte)0);
+                bytesWritten += 4 + Align(matchValue.Length);
+            }
+
+            public override string ToString()
+            {
+                return $"info[{field}] = {ValueToString(matchValue)}";
+            }
+        }
+
+        class NamedExpression : Expression
+        {
+            private readonly ExpressionOperation op;
+            private readonly byte[] name;
+
+            public NamedExpression(
+                ExpressionOperation op,
+                byte[] name)
+            {
+                this.op = op;
+                this.name = name;
+            }
+
+            public override int Size =>
+                8 +
+                Align(name.Length);
+
+            public override void Write(Span<byte> buffer, out int bytesWritten)
+            {
+                BinaryPrimitives.WriteUInt32BigEndian(buffer.Slice(0, 4), (uint)op);
+                BinaryPrimitives.WriteInt32BigEndian(buffer.Slice(4, 4), name.Length);
+                name.CopyTo(buffer.Slice(8, name.Length));
+                buffer.Slice(8 + name.Length, Align(name.Length) - name.Length).Fill((byte)0);
+                bytesWritten = 8 + Align(name.Length);
+            }
+
+            public override string ToString()
+            {
+                return op switch {
+                    ExpressionOperation.NamedAnchor => $"anchor apple {ValueToString(name)}",
+                    ExpressionOperation.NamedCode => $"({ValueToString(name)})",
+                    _ => "unknown",
+                };
+            }
+        }
+
+        class TrustedCertExpression : Expression
+        {
+            private readonly int certificateIndex;
+
+            public TrustedCertExpression(int certificateIndex)
+            {
+                this.certificateIndex = certificateIndex;
+            }
+
+            public override int Size => 8;
+
+            public override void Write(Span<byte> buffer, out int bytesWritten)
+            {
+                BinaryPrimitives.WriteUInt32BigEndian(buffer.Slice(0, 4), (uint)ExpressionOperation.TrustedCert);
+                BinaryPrimitives.WriteInt32BigEndian(buffer.Slice(4, 4), certificateIndex);
+                bytesWritten = 8;
+            }
+
+            public override string ToString()
+            {
+                return $"certificate {CertificateSlotToString(certificateIndex)} trusted";
+            }
+        }
+
+        class PlatformExpression : Expression
+        {
+            private readonly MachPlatform platform;
+
+            public PlatformExpression(MachPlatform platform)
+            {
+                this.platform = platform;
+            }
+
+            public override int Size => 8;
+
+            public override void Write(Span<byte> buffer, out int bytesWritten)
+            {
+                BinaryPrimitives.WriteUInt32BigEndian(buffer.Slice(0, 4), (uint)ExpressionOperation.Platform);
+                BinaryPrimitives.WriteUInt32BigEndian(buffer.Slice(4, 4), (uint)platform);
+                bytesWritten = 8;
+            }
+
+            public override string ToString()
+            {
+                return $"platform = {platform}";
             }
         }
     }

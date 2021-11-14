@@ -310,6 +310,10 @@ namespace Melanzana.CodeSign
                             files2Value.Add("requirement", nestedInfo.Value.DesignatedRequirement.ToString());
                     }
                 }
+                else if (resourceAndRule.Info.LinkTarget != null)
+                {
+                    files2Value.Add("symlink", resourceAndRule.Info.LinkTarget);
+                }
                 else
                 {
                     using (var fileStream = File.OpenRead(resourceAndRule.Info.FullName))
@@ -345,6 +349,11 @@ namespace Melanzana.CodeSign
                 NSData hash;
 
                 Debug.Assert(resourceAndRule.Info is FileInfo);
+
+                if (resourceAndRule.Info.LinkTarget != null)
+                {
+                    continue;
+                }
 
                 if (files2.TryGetValue(resourceAndRule.Path, out var files2Value))
                 {

@@ -20,7 +20,7 @@ namespace Melanzana.CodeSign.Tests
             var expr = new byte[defaultReq.Expression.Size];
             defaultReq.Expression.Write(expr, out var exprBytesWritten);
             Assert.Equal(expr.Length, exprBytesWritten);
-            var readExpression = Expression.FromBinary(expr);
+            var readExpression = Expression.FromBlob(expr);
             Assert.Equal(stringExpr, readExpression.ToString());
         }
     }

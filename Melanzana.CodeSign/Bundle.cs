@@ -30,8 +30,6 @@ namespace Melanzana.CodeSign
             hasContents = Directory.Exists(Path.Combine(path, "Contents"));
             ContentsPath = hasContents ? Path.Combine(path, "Contents") : path;
 
-            hasResources = hasContents && Directory.Exists(Path.Combine(ContentsPath, "Resources"));
-
             // Look for Info.plist, then check CFBundleExecutable
             var infoPlistPath = Path.Combine(ContentsPath, "Info.plist");
             if (File.Exists(infoPlistPath))
@@ -60,8 +58,10 @@ namespace Melanzana.CodeSign
                     this.bundleIdentifier = (string)bundleIdentifier;
                 }
             }
-            else if (!hasContents)
+            else if (!hasContents && Directory.Exists(Path.Combine(BundlePath, "Versions")))
             {
+                ContentsPath = Path.Combine(BundlePath, "Versions", "Current");
+
                 // FIXME: Quick hack to get framework executables
                 var guessedName = Path.GetFileNameWithoutExtension(path);
                 if (File.Exists(Path.Combine(BundlePath, guessedName)))
@@ -69,6 +69,8 @@ namespace Melanzana.CodeSign
                     mainExecutable = guessedName;
                 }
             }
+
+            hasResources = Directory.Exists(Path.Combine(ContentsPath, "Resources"));
         }
 
         public string? MainExecutable => mainExecutable != null ? Path.Combine(ContentsPath, mainExecutable) : null;

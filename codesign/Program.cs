@@ -1,14 +1,8 @@
-﻿using Azure.Core;
-using Azure.Identity;
+﻿using Azure.Identity;
 using Azure.Security.KeyVault.Certificates;
 using Claunia.PropertyList;
 using System.CommandLine;
-using System.CommandLine.Binding;
-using System.CommandLine.Invocation;
-using System.CommandLine.IO;
-using System.CommandLine.Parsing;
 using System.Security.Cryptography.X509Certificates;
-using Melanzana.CodeSign;
 using RSAKeyVaultProvider;
 
 namespace Melanzana.CodeSign
@@ -17,15 +11,20 @@ namespace Melanzana.CodeSign
     {
         public static int Main(string[] args)
         {
+            var identity = new Argument<string>("identity", "Name of signing identity or \"-\" for ad-hoc signing");
+            var path = new Argument<string>("path", "Path to bundle or executable on disk");
+            var entitlements = new Option<string?>("--entitlements", "Path to entitlements to embed into the signature");
+            var azureKekVaultUrl = new Option<string?>("--azure-key-vault-url", "URL to an Azure Key Vault");
+
             var signCommand = new Command("sign", "Sign code at path using given identity")
             {
-                new Argument<string>("identity", "Name of signing identity or \"-\" for ad-hoc signing"),
-                new Argument<string>("path", "Path to bundle or executable on disk"),
-                new Option<string?>("--entitlements", "Path to entitlements to embed into the signature"),
-                new Option<string?>("--azure-key-vault-url", "URL to an Azure Key Vault"),
+                identity,
+                path,
+                entitlements,
+                azureKekVaultUrl,
             };
 
-            signCommand.Handler = CommandHandler.Create<string, string, string?, string?>(HandleSign);
+            signCommand.SetHandler<string, string, string?, string?>(HandleSign, identity, path, entitlements, azureKekVaultUrl);
 
             return new RootCommand { signCommand }.Invoke(args);
         }

@@ -11,7 +11,7 @@ namespace Melanzana.CodeSign.Tests
         public void DefaultRequirement()
         {
             var defaultReq = RequirementSet.CreateDefault("BUNDLE ID", "FRIENDLY NAME")[RequirementType.Designated];
-            var stringExpr = "identifier \"BUNDLE ID\" and apple generic anchor and certificate leaf [subject.CN] = \"FRIENDLY NAME\" and certificate 1 [field.1.2.840.113635.100.6.2.1] /* exists */";
+            var stringExpr = "identifier \"BUNDLE ID\" and anchor apple generic and certificate leaf[subject.CN] = \"FRIENDLY NAME\" and certificate 1[field.1.2.840.113635.100.6.2.1] /* exists */";
 
             // Check string representation
             Assert.Equal(stringExpr, defaultReq.ToString());

@@ -112,6 +112,41 @@ namespace Melanzana.MachO
             return Stream.Null;
         }
 
+        public Stream GetStreamAtVirtualAddress(ulong address, uint length)
+        {
+            // FIXME: Should we dispose the original stream? At the moment it would be no-op
+            // anyway since it's always SliceStream or UnclosableMemoryStream.
+
+            foreach (var segment in LoadCommands.OfType<MachSegment>())
+            {
+                if (address >= segment.VirtualAddress &&
+                    address <= segment.VirtualAddress + segment.Size)
+                {
+                    if (segment.Sections.Count == 0)
+                    {
+                        return segment.GetReadStream().Slice(
+                            (long)(address - segment.VirtualAddress),
+                            (long)Math.Min(length, segment.VirtualAddress + segment.FileSize - address));
+                    }
+
+                    foreach (var section in segment.Sections)
+                    {
+                        if (address >= section.VirtualAddress &&
+                            address <= section.VirtualAddress + section.Size)
+                        {
+                            return section.GetReadStream().Slice(
+                                (long)(address - section.VirtualAddress),
+                                (long)Math.Min(length, section.VirtualAddress + section.Size - address));
+                        }
+                    }
+
+                    return Stream.Null;
+                }
+            }
+
+            return Stream.Null;
+        }
+
         public Stream GetOriginalStream()
         {
             if (stream == null)

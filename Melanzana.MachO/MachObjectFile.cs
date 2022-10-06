@@ -1,5 +1,6 @@
 using Melanzana.Streams;
 using Melanzana.MachO.BinaryFormat;
+using System.Text;
 
 namespace Melanzana.MachO
 {
@@ -27,6 +28,29 @@ namespace Melanzana.MachO
         public IList<MachLoadCommand> LoadCommands { get; } = new List<MachLoadCommand>();
 
         /// <summary>
+        /// For object files the relocation, symbol tables and other data are stored at the end of the
+        /// file but not covered by any segment/section. We create an arbitrary segment to make it
+        /// easier to address.
+        /// </summary>
+        public MachSegment? UnlinkedSegment { get; set; }
+
+        public IEnumerable<MachSegment> Segments
+        {
+            get
+            {
+                foreach (var segment in LoadCommands.OfType<MachSegment>())
+                {
+                    yield return segment;
+                }
+
+                if (UnlinkedSegment != null)
+                {
+                    yield return UnlinkedSegment;
+                }
+            }
+        }
+
+        /// <summary>
         /// Get the lowest file offset of any section in the file. This allows calculating space that is
         /// reserved for adding new load commands (header pad).
         /// </summary>
@@ -34,7 +58,7 @@ namespace Melanzana.MachO
         {
             ulong lowestFileOffset = (ulong)stream.Length;
 
-            foreach (var segment in LoadCommands.OfType<MachSegment>())
+            foreach (var segment in Segments)
             {
                 foreach (var section in segment.Sections)
                 {
@@ -52,7 +76,7 @@ namespace Melanzana.MachO
         public ulong GetSize()
         {
             // Assume the size is the highest file offset+size of any segment
-            return LoadCommands.OfType<MachSegment>().Max(s => s.FileOffset + s.FileSize);
+            return Segments.Max(s => s.FileOffset + s.FileSize);
         }
 
         public ulong GetSigningLimit()
@@ -82,10 +106,10 @@ namespace Melanzana.MachO
             // FIXME: Should we dispose the original stream? At the moment it would be no-op
             // anyway since it's always SliceStream or UnclosableMemoryStream.
 
-            foreach (var segment in LoadCommands.OfType<MachSegment>())
+            foreach (var segment in Segments)
             {
                 if (fileOffset >= segment.FileOffset &&
-                    fileOffset <= segment.FileOffset + segment.FileSize)
+                    fileOffset < segment.FileOffset + segment.FileSize)
                 {
                     if (segment.Sections.Count == 0)
                     {
@@ -97,7 +121,7 @@ namespace Melanzana.MachO
                     foreach (var section in segment.Sections)
                     {
                         if (fileOffset >= section.FileOffset &&
-                            fileOffset <= section.FileOffset + section.Size)
+                            fileOffset < section.FileOffset + section.Size)
                         {
                             return section.GetReadStream().Slice(
                                 (long)(fileOffset - section.FileOffset),
@@ -117,10 +141,10 @@ namespace Melanzana.MachO
             // FIXME: Should we dispose the original stream? At the moment it would be no-op
             // anyway since it's always SliceStream or UnclosableMemoryStream.
 
-            foreach (var segment in LoadCommands.OfType<MachSegment>())
+            foreach (var segment in Segments)
             {
                 if (address >= segment.VirtualAddress &&
-                    address <= segment.VirtualAddress + segment.Size)
+                    address < segment.VirtualAddress + segment.Size)
                 {
                     if (segment.Sections.Count == 0)
                     {
@@ -132,7 +156,7 @@ namespace Melanzana.MachO
                     foreach (var section in segment.Sections)
                     {
                         if (address >= section.VirtualAddress &&
-                            address <= section.VirtualAddress + section.Size)
+                            address < section.VirtualAddress + section.Size)
                         {
                             return section.GetReadStream().Slice(
                                 (long)(address - section.VirtualAddress),
@@ -153,6 +177,135 @@ namespace Melanzana.MachO
                 return Stream.Null;
 
             return stream.Slice(0, stream.Length);
+        }
+
+        public void UpdateLayout()
+        {
+            long position = 0;
+
+            // 4 bytes magic number
+            position += 4;
+            // Mach header
+            position += Is64Bit ? MachHeader64.BinarySize : MachHeader.BinarySize;
+            // Calculate size of load command
+            foreach (var loadCommand in LoadCommands)
+            {
+                position += LoadCommandHeader.BinarySize;
+
+                switch (loadCommand)
+                {
+                    case MachSegment segment:
+                        if (Is64Bit)
+                        {
+                            position += Segment64Header.BinarySize + segment.Sections.Count * Section64Header.BinarySize;
+                        }
+                        else
+                        {
+                            position += SegmentHeader.BinarySize + segment.Sections.Count * SectionHeader.BinarySize;
+                        }
+                        break;
+
+                    case MachCodeSignature: 
+                    case MachDylibCodeSigningDirs:
+                    case MachSegmentSplitInfo:
+                    case MachFunctionStarts:
+                    case MachDataInCode:
+                    case MachLinkerOptimizationHint:
+                    case MachDyldExportsTrie:
+                    case MachDyldChainedFixups:
+                        position += LinkEditHeader.BinarySize;
+                        break;
+
+                    case MachLoadDylibCommand:
+                    case MachLoadWeakDylibCommand:
+                    case MachReexportDylibCommand:
+                        position += AlignedSize(
+                            DylibCommandHeader.BinarySize +
+                            Encoding.UTF8.GetByteCount(((MachDylibCommand)loadCommand).Name) + 1,
+                            Is64Bit);
+                        break;
+
+                    case MachEntrypointCommand entrypointCommand:
+                        position += MainCommandHeader.BinarySize;
+                        break;
+
+                    case MachVersionMinMacOS:
+                    case MachVersionMinIOS:
+                    case MachVersionMinTvOS:
+                    case MachVersionMinWatchOS:
+                        position += VersionMinCommandHeader.BinarySize;
+                        break;
+
+                    case MachBuildVersion versionCommand:
+                        position += BuildVersionCommandHeader.BinarySize + (versionCommand.ToolVersions.Count * BuildToolVersionHeader.BinarySize);
+                        break;
+
+                    case MachSymbolTable:
+                        position += SymbolTableCommandHeader.BinarySize;
+                        break;
+
+                    case MachDynamicLinkEditSymbolTable:
+                        position += DynamicSymbolTableCommandHeader.BinarySize;
+                        break;
+
+                    case MachCustomLoadCommand customLoadCommand:
+                        position += customLoadCommand.Data.Length;
+                        break;
+                }
+            }
+
+            if (FileType != MachFileType.Object)
+            {
+                const uint pageAligment = 0x4000 - 1;
+                position = (position + pageAligment) & ~pageAligment;
+            }
+
+            ulong virtualAddress = 0;
+            foreach (var segment in Segments)
+            {
+                ulong segmentSize = 0;
+
+                segment.VirtualAddress = virtualAddress;
+                segment.FileOffset = (ulong)position;
+
+                foreach (var section in segment.Sections)
+                {
+                    long alignment = 1 << (int)section.Log2Alignment;
+                    var alignedSize = ((long)section.Size + alignment - 1) & ~(alignment - 1);
+
+                    position = (position + alignment - 1) & ~(alignment - 1);
+                    virtualAddress = (ulong)(((long)virtualAddress + alignment - 1) & ~(alignment - 1));
+
+                    if (section.Type is not MachSectionType.ZeroFill or MachSectionType.GBZeroFill or MachSectionType.ThreadLocalZeroFill)
+                    {
+                        section.FileOffset = (uint)position;
+                        position += alignedSize;
+                    }
+
+                    // TODO: Calculate virtual addresses for non-object files
+                    section.VirtualAddress = virtualAddress;
+                    virtualAddress += (ulong)alignedSize;
+
+                    segmentSize = Math.Max(segmentSize, virtualAddress - segment.VirtualAddress);
+                }
+
+                segment.Size = segmentSize;
+            }
+
+            foreach (var loadCommand in LoadCommands)
+            {
+                loadCommand.UpdateLayout(this);
+            }
+
+            static int AlignedSize(int size, bool is64bit) => is64bit ? (size + 7) & ~7 : (size + 3) & ~3;
+        }
+
+        internal void EnsureUnlinkedSegmentExists()
+        {
+            if (UnlinkedSegment == null)
+            {
+                UnlinkedSegment = new MachSegment();
+            }
         }
     }
 }

@@ -258,6 +258,19 @@ namespace Melanzana.MachO
             stream.Write(symbolTableHeaderBuffer);
         }
 
+        private static void WriteDynamicLinkEditSymbolTableCommand(Stream stream, MachDynamicLinkEditSymbolTable dySymbolTable, bool isLittleEndian)
+        {
+            WriteLoadCommandHeader(
+                stream,
+                MachLoadCommandType.DynamicLinkEditSymbolTable,
+                LoadCommandHeader.BinarySize + DynamicSymbolTableCommandHeader.BinarySize,
+                isLittleEndian);
+
+            Span<byte> symbolTableHeaderBuffer = stackalloc byte[DynamicSymbolTableCommandHeader.BinarySize];
+            var symbolTableHeader = dySymbolTable.Header;
+            symbolTableHeader.Write(symbolTableHeaderBuffer, isLittleEndian, out var _);
+            stream.Write(symbolTableHeaderBuffer);
+        }
 
         public static void Write(Stream stream, MachObjectFile objectFile)
         {
@@ -295,9 +308,13 @@ namespace Melanzana.MachO
                     case MachVersionMinWatchOS watchOSBuildVersion: WriteVersionMinCommand(loadCommandsStream, MachLoadCommandType.VersionMinWatchOS, watchOSBuildVersion, isLittleEndian); break;
                     case MachBuildVersion buildVersion: WriteBuildVersion(loadCommandsStream, buildVersion, isLittleEndian); break;
                     case MachSymbolTable symbolTable: WriteSymbolTableCommand(loadCommandsStream, symbolTable, isLittleEndian); break;
+                    case MachDynamicLinkEditSymbolTable dySymbolTable: WriteDynamicLinkEditSymbolTableCommand(loadCommandsStream, dySymbolTable, isLittleEndian); break;
                     case MachCustomLoadCommand customLoadCommand:
                         WriteLoadCommandHeader(loadCommandsStream, customLoadCommand.Type, customLoadCommand.Data.Length + LoadCommandHeader.BinarySize, isLittleEndian);
                         loadCommandsStream.Write(customLoadCommand.Data);
+                        break;
+                    default:
+                        Debug.Fail("Unknown load command");
                         break;
                 }
             }
@@ -342,7 +359,7 @@ namespace Melanzana.MachO
             // Save the current position within the Mach-O file. Now we need to output the segments
             // and fill in the gaps as we go.
             ulong currentOffset = (ulong)(stream.Position - initialOffset);
-            var orderedSegments = objectFile.LoadCommands.OfType<MachSegment>().OrderBy(s => s.FileOffset).ToList();
+            var orderedSegments = objectFile.Segments.OrderBy(s => s.FileOffset).ToList();
 
             foreach (var segment in orderedSegments)
             {

@@ -1,4 +1,6 @@
+using System.Buffers.Binary;
 using System.ComponentModel;
+using System.Diagnostics;
 using Melanzana.Streams;
 
 namespace Melanzana.MachO
@@ -40,7 +42,7 @@ namespace Melanzana.MachO
 
         public ulong Size
         {
-            get => FileOffset != 0 && dataStream != null ? (ulong)dataStream.Length : size;
+            get => dataStream != null ? (ulong)dataStream.Length : size;
             set => size = value;
         }
 
@@ -88,6 +90,8 @@ namespace Melanzana.MachO
 
         internal bool HasContentChanged { get; set; }
 
+        internal MachSection? RelocationSection { get; set; }
+
         public Stream GetReadStream()
         {
             if (Size == 0 || dataStream == null)
@@ -103,6 +107,76 @@ namespace Melanzana.MachO
             HasContentChanged = true;
             dataStream = new UnclosableMemoryStream();
             return dataStream;
+        }
+
+        public IEnumerable<MachRelocation> GetRelocationReader(MachObjectFile objectFile)
+        {
+            var relocationStream =
+                RelocationSection?.GetReadStream() ??
+                objectFile.GetStreamAtFileOffset(RelocationOffset, NumberOfReloationEntries * 8);
+            var relocationBuffer = new byte[8];
+            
+            for (uint i = 0; i < NumberOfReloationEntries; i++)            
+            {
+                relocationStream.ReadFully(relocationBuffer);
+                int address =
+                    objectFile.IsLittleEndian ?
+                    BinaryPrimitives.ReadInt32LittleEndian(relocationBuffer) :
+                    BinaryPrimitives.ReadInt32BigEndian(relocationBuffer);
+                uint info =
+                    objectFile.IsLittleEndian ?
+                    BinaryPrimitives.ReadUInt32LittleEndian(relocationBuffer.AsSpan(4)) :
+                    BinaryPrimitives.ReadUInt32BigEndian(relocationBuffer.AsSpan(4));
+                yield return new MachRelocation
+                {
+                    Address = address,
+                    SymbolOrSectionIndex = info & 0xff_ff_ff,
+                    IsPCRelative = (info & 0x1_00_00_00) > 0,
+                    Length = ((info >> 25) & 3) switch { 0 => 1, 1 => 2, 2 => 4, _ => 8 },
+                    IsExternal = (info & 0x8_00_00_00) > 0,
+                    RelocationType = (MachRelocationType)(info >> 28)
+                };
+            }
+        }
+
+        public MachRelocationWriter GetRelocationWriter(MachObjectFile objectFile)
+        {
+            ArgumentNullException.ThrowIfNull(objectFile);
+
+            // We currently only support writing relocations to object files
+            // and only if the relocations are part of the unlinked section.
+            if (objectFile.FileType != MachFileType.Object)
+            {
+                throw new NotImplementedException();
+            }
+
+            objectFile.EnsureUnlinkedSegmentExists();
+            Debug.Assert(objectFile.UnlinkedSegment != null);
+
+            if (RelocationSection == null)
+            {
+                if (NumberOfReloationEntries == 0)
+                {
+                    // Create new section
+                    RelocationSection = new MachSection { Type = MachSectionType.Regular };
+                    objectFile.UnlinkedSegment.Sections.Add(RelocationSection);
+                }
+                else
+                {
+                    // Find existing section
+                    RelocationSection = objectFile.UnlinkedSegment.Sections.First(s => s.FileOffset == RelocationOffset);
+                }
+            }
+
+            return new MachRelocationWriter(objectFile, this, RelocationSection);
+        }
+
+        internal void UpdateLayout(MachObjectFile objectFile)
+        {
+            if (RelocationSection != null)
+            {
+                this.RelocationOffset = RelocationSection.FileOffset;                
+            }
         }
     }
 }

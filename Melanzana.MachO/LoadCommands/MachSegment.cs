@@ -43,8 +43,10 @@ namespace Melanzana.MachO
 
         internal ulong OriginalFileSize { get; set; }
 
+        internal bool IsObjectFile;
+
         /// <summary>
-        /// Gets the size of the segement in the file.
+        /// Gets the size of the segment in the file.
         /// </summary>
         /// <remarks>
         /// We preserve the original FileSize when no editing on section contents was
@@ -58,10 +60,17 @@ namespace Melanzana.MachO
             {
                 if (Sections.Count > 0)
                 {
-                    uint pageAligment = 0x4000 - 1;
                     if (Sections.Any(s => s.HasContentChanged))
                     {
-                        return ((Sections.Where(s => s.IsInFile).Select(s => s.FileOffset + s.Size).Max() + pageAligment - 1) & ~(pageAligment - 1)) - FileOffset;
+                        if (IsObjectFile)
+                        {
+                            return Sections.Where(s => s.IsInFile).Select(s => s.FileOffset + s.Size).Max() - FileOffset;
+                        }
+                        else
+                        {
+                            const uint pageAlignment = 0x4000 - 1;
+                            return ((Sections.Where(s => s.IsInFile).Select(s => s.FileOffset + s.Size).Max() + pageAlignment) & ~pageAlignment) - FileOffset;
+                        }
                     }
                     else
                     {
@@ -137,6 +146,16 @@ namespace Melanzana.MachO
 
             dataStream = new UnclosableMemoryStream();
             return dataStream;
+        }
+
+        internal override void UpdateLayout(MachObjectFile objectFile)
+        {
+            IsObjectFile = objectFile.FileType == MachFileType.Object;
+
+            foreach (var section in Sections)
+                section.UpdateLayout(objectFile);
+
+            base.UpdateLayout(objectFile);
         }
     }
 }

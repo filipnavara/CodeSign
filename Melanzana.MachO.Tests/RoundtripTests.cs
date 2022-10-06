@@ -37,5 +37,12 @@ namespace Melanzana.MachO.Tests
             var aFatOutStream = typeof(RoundtripTests).Assembly.GetManifestResourceStream("Melanzana.MachO.Tests.Data.a.fat.out")!;
             TestRoundtrip(aFatOutStream);
         }
+
+        [Fact]
+        public void ObjectFileRoundtrip()
+        {
+            var aOutStream = typeof(RoundtripTests).Assembly.GetManifestResourceStream("Melanzana.MachO.Tests.Data.a.o")!;
+            TestRoundtrip(aOutStream);
+        }
     }
 }

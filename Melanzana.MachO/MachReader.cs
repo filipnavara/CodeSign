@@ -8,7 +8,7 @@ namespace Melanzana.MachO
 {
     public static class MachReader
     {
-        private static MachSegment ReadSegment(ReadOnlySpan<byte> loadCommandPtr, bool isLittleEndian, Stream stream)
+        private static MachSegment ReadSegment(ReadOnlySpan<byte> loadCommandPtr, bool isLittleEndian, bool isObjectFile, Stream stream)
         {
             var segmentHeader = SegmentHeader.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), isLittleEndian, out var _);
 
@@ -17,6 +17,7 @@ namespace Melanzana.MachO
                 new MachSegment();
             machSegment.FileOffset = segmentHeader.FileOffset;
             machSegment.OriginalFileSize = segmentHeader.FileSize;
+            machSegment.IsObjectFile = isObjectFile;
             machSegment.Name = segmentHeader.Name;
             machSegment.VirtualAddress = segmentHeader.Address;
             machSegment.Size = segmentHeader.Size;
@@ -204,6 +205,14 @@ namespace Melanzana.MachO
             };
         }
 
+        private static MachDynamicLinkEditSymbolTable ReadDynamicLinkEditSymbolTable(ReadOnlySpan<byte> loadCommandPtr, bool isLittleEndian)
+        {
+            var dynamicSymbolTableHeader = DynamicSymbolTableCommandHeader.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), isLittleEndian, out var _);
+
+            // TODO: Clean up
+            return new MachDynamicLinkEditSymbolTable(dynamicSymbolTableHeader);
+        }
+
         private static MachObjectFile ReadSingle(FatArchHeader? fatArchHeader, MachMagic magic, Stream stream)
         {
             Span<byte> headerBuffer = stackalloc byte[Math.Max(MachHeader.BinarySize, MachHeader64.BinarySize)];
@@ -254,7 +263,7 @@ namespace Melanzana.MachO
                 var loadCommandHeader = LoadCommandHeader.Read(loadCommandPtr, isLittleEndian, out var _);
                 objectFile.LoadCommands.Add(loadCommandHeader.CommandType switch
                 {
-                    MachLoadCommandType.Segment => ReadSegment(loadCommandPtr, isLittleEndian, stream),
+                    MachLoadCommandType.Segment => ReadSegment(loadCommandPtr, isLittleEndian, objectFile.FileType == MachFileType.Object, stream),
                     MachLoadCommandType.Segment64 => ReadSegment64(loadCommandPtr, isLittleEndian, stream),
                     MachLoadCommandType.CodeSignature => ReadLinkEdit<MachCodeSignature>(loadCommandPtr, isLittleEndian),
                     MachLoadCommandType.DylibCodeSigningDRs => ReadLinkEdit<MachDylibCodeSigningDirs>(loadCommandPtr, isLittleEndian),
@@ -274,9 +283,74 @@ namespace Melanzana.MachO
                     MachLoadCommandType.VersionMinWatchOS => ReadVersionMinCommand<MachVersionMinWatchOS>(loadCommandPtr, isLittleEndian),
                     MachLoadCommandType.BuildVersion => ReadBuildVersion(loadCommandPtr, isLittleEndian),
                     MachLoadCommandType.SymbolTable => ReadSymbolTable(loadCommandPtr, isLittleEndian),
+                    MachLoadCommandType.DynamicLinkEditSymbolTable => ReadDynamicLinkEditSymbolTable(loadCommandPtr, isLittleEndian),
                     _ => new MachCustomLoadCommand(loadCommandHeader.CommandType, loadCommandPtr.Slice(LoadCommandHeader.BinarySize, (int)loadCommandHeader.CommandSize - LoadCommandHeader.BinarySize).ToArray()),
                 });
                 loadCommandPtr = loadCommandPtr.Slice((int)loadCommandHeader.CommandSize);
+            }
+
+            if (objectFile.FileType == MachFileType.Object)
+            {
+                // Create a segment to represent the unlinked data
+                var unlinkedSegment = new MachSegment();
+                unlinkedSegment.FileOffset = objectFile.GetSize();
+
+                // Relocation tables
+                int tempName = 1;
+                foreach (var section in objectFile.LoadCommands.OfType<MachSegment>().SelectMany(segment => segment.Sections))
+                {
+                    if (section.NumberOfReloationEntries > 0)
+                    {
+                        var relocationSection = new MachSection(stream.Slice(section.RelocationOffset, section.NumberOfReloationEntries * 8));
+                        relocationSection.Type = MachSectionType.Regular;
+                        relocationSection.FileOffset = section.RelocationOffset;
+                        relocationSection.SectionName = "$reloc" + tempName;
+                        unlinkedSegment.Sections.Add(relocationSection);
+                    }
+                }
+
+                tempName = 1;
+                foreach (var dataInCode in objectFile.LoadCommands.OfType<MachDataInCode>())
+                {
+                    var dataInCodeSection = new MachSection(stream.Slice(dataInCode.FileOffset, dataInCode.FileSize));
+                    dataInCodeSection.Type = MachSectionType.Regular;
+                    dataInCodeSection.FileOffset = dataInCode.FileOffset;
+                    dataInCodeSection.SectionName = "$dataincode" + tempName;
+                    unlinkedSegment.Sections.Add(dataInCodeSection);
+                }
+
+                // Linker optimization hints
+                foreach (var linkerOptimizationHint in objectFile.LoadCommands.OfType<MachLinkerOptimizationHint>())
+                {
+                    var lohSection = new MachSection(stream.Slice(linkerOptimizationHint.FileOffset, linkerOptimizationHint.FileSize));
+                    lohSection.Type = MachSectionType.Regular;
+                    lohSection.FileOffset = linkerOptimizationHint.FileOffset;
+                    lohSection.SectionName = "$loh";
+                    unlinkedSegment.Sections.Add(lohSection);
+                }
+
+                // Symbol table, string table
+                foreach (var symbolTable in objectFile.LoadCommands.OfType<MachSymbolTable>())
+                {
+                    long symbolTableSize =
+                        (long)symbolTable.NumberOfSymbols *
+                        (long)(SymbolHeader.BinarySize + (objectFile.Is64Bit ? 8 : 4));
+
+                    var symbolTableSection = new MachSection(stream.Slice(symbolTable.SymbolTableOffset, symbolTableSize));
+                    symbolTableSection.Type = MachSectionType.Regular;
+                    symbolTableSection.FileOffset = symbolTable.SymbolTableOffset;
+                    symbolTableSection.SectionName = "$symtab";
+                    unlinkedSegment.Sections.Add(symbolTableSection);
+
+                    var stringTableSection = new MachSection(stream.Slice(symbolTable.StringTableOffset, symbolTable.StringTableSize));
+                    stringTableSection.Type = MachSectionType.Regular;
+                    stringTableSection.FileOffset = symbolTable.StringTableOffset;
+                    stringTableSection.SectionName = "$stringtab";
+                    unlinkedSegment.Sections.Add(stringTableSection);
+                }
+
+                unlinkedSegment.OriginalFileSize = unlinkedSegment.Sections.Select(s => s.FileOffset + s.Size).Max() - unlinkedSegment.FileOffset;
+                objectFile.UnlinkedSegment = unlinkedSegment;
             }
 
             return objectFile;

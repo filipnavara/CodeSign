@@ -23,3 +23,16 @@ jobs:
       run: dotnet test Melanzana.MachO.Tests
     - name: Test (CodeSign)
       run: dotnet test Melanzana.CodeSign.Tests
+    - name: Create NuGet packages
+      run: |
+        dotnet pack -c Release Melanzana.Streams -o nuget/
+        dotnet pack -c Release Melanzana.MachO -o nuget/
+        dotnet pack -c Release Melanzana.CodeSign -o nuget/
+    - name: Get version information
+      uses: dotnet/nbgv@master
+      id: nbgv
+    - name: Publish NuGet packages as artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: melanzana-${{ steps.nbgv.outputs.SemVer2 }}
+        path: nuget/

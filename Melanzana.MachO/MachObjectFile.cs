@@ -258,6 +258,7 @@ namespace Melanzana.MachO
             }
 
             ulong virtualAddress = 0;
+            MachSegment? linkEditSegment = null;
             foreach (var segment in Segments)
             {
                 ulong segmentSize = 0;
@@ -287,6 +288,29 @@ namespace Melanzana.MachO
                 }
 
                 segment.Size = segmentSize;
+
+                if (segment.Name == "__LINKEDIT")
+                {
+                    linkEditSegment = segment;
+                }
+            }
+
+            var linkEditData = new List<MachLinkEditData>(LinkEditData);
+
+            // Sort by file offset first
+            linkEditData.Sort((sectionA, sectionB) =>
+                sectionA.FileOffset < sectionB.FileOffset ? -1 :
+                (sectionA.FileOffset > sectionB.FileOffset ? 1 : 0));
+
+            foreach (var data in linkEditData)
+            {
+                data.FileOffset = (uint)position;
+                position += (long)data.Size;
+            }
+
+            if (linkEditSegment != null)
+            {
+                linkEditSegment.Size = (ulong)position - linkEditSegment.FileOffset;
             }
 
             static int AlignedSize(int size, bool is64bit) => is64bit ? (size + 7) & ~7 : (size + 3) & ~3;

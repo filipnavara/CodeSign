@@ -323,38 +323,6 @@ namespace Melanzana.MachO
                 loadCommandPtr = loadCommandPtr.Slice((int)loadCommandHeader.CommandSize);
             }
 
-            // Reconstruct the list of linker data
-
-            // Relocation tables
-            foreach (var section in objectFile.LoadCommands.OfType<MachSegment>().SelectMany(segment => segment.Sections))
-            {
-                objectFile.LinkEditData.Add(section.RelocationData);
-            }
-
-            // Anything derived from MachLinkEdit (data-in-code, linker optimization hints)
-            foreach (var linkEdit in objectFile.LoadCommands.OfType<MachLinkEdit>())
-            {
-                objectFile.LinkEditData.Add(linkEdit.Data);
-            }
-
-            // Symbol table, string table
-            foreach (var symbolTable in objectFile.LoadCommands.OfType<MachSymbolTable>())
-            {
-                objectFile.LinkEditData.Add(symbolTable.SymbolTableData);
-                objectFile.LinkEditData.Add(symbolTable.StringTableData);
-            }
-
-            foreach (var dyldInfo in objectFile.LoadCommands.OfType<MachDyldInfo>())
-            {
-                objectFile.LinkEditData.Add(dyldInfo.RebaseData);
-                objectFile.LinkEditData.Add(dyldInfo.BindData);
-                objectFile.LinkEditData.Add(dyldInfo.WeakBindData);
-                objectFile.LinkEditData.Add(dyldInfo.LazyBindData);
-                objectFile.LinkEditData.Add(dyldInfo.ExportData);
-            }
-
-            // TODO: LC_TWOLEVEL_HINTS
-
             return objectFile;
         }
 

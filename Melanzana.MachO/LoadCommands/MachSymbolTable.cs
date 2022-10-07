@@ -17,8 +17,6 @@ namespace Melanzana.MachO
             this.objectFile = objectFile;
             SymbolTableData = new MachLinkEditData();
             StringTableData = new MachLinkEditData();
-            objectFile.LinkEditData.Add(SymbolTableData);
-            objectFile.LinkEditData.Add(StringTableData);
         }
 
         internal MachSymbolTable(
@@ -96,6 +94,15 @@ namespace Melanzana.MachO
         public MachSymbolTableWriter GetWriter()
         {
             return new MachSymbolTableWriter(objectFile, this);
+        }
+
+        internal override IEnumerable<MachLinkEditData> LinkEditData
+        {
+            get
+            {
+                yield return SymbolTableData;
+                yield return StringTableData;
+            }
         }
     }
 }

@@ -9,5 +9,13 @@ namespace Melanzana.MachO
         public uint FileSize => (uint)Data.Size;
 
         public MachLinkEditData Data { get; init; }
+
+        internal override IEnumerable<MachLinkEditData> LinkEditData
+        {
+            get
+            {
+                yield return Data;
+            }
+        }
     }
 }

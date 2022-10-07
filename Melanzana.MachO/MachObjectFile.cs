@@ -41,7 +41,7 @@ namespace Melanzana.MachO
         /// For linked files this points to the real __LINKEDIT segment. We slice it into subsections
         /// based on the known LinkEdit commands though.
         /// </summary>
-        public IList<MachLinkEditData> LinkEditData { get; } = new List<MachLinkEditData>();
+        public IEnumerable<MachLinkEditData> LinkEditData => LoadCommands.SelectMany(command => command.LinkEditData);
 
         public IEnumerable<MachSegment> Segments => LoadCommands.OfType<MachSegment>();
 

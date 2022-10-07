@@ -19,7 +19,6 @@ namespace Melanzana.MachO
         public MachSection(MachObjectFile objectFile, string segmentName, string sectionName, Stream? stream)
             : this(objectFile, segmentName, sectionName, stream, new MachLinkEditData())
         {
-            objectFile.LinkEditData.Add(RelocationData);
         }
 
         internal MachSection(

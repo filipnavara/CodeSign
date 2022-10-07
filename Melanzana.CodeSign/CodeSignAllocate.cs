@@ -56,7 +56,6 @@ namespace Melanzana.CodeSign
 
                 codeSignatureCommand = new MachCodeSignature { Data = codeSignatureData };
                 machO.LoadCommands.Add(codeSignatureCommand);
-                machO.LinkEditData.Add(codeSignatureData);
                 oldSignatureSize = 0;
 
                 // Update __LINKEDIT segment to include the newly created command

@@ -149,5 +149,16 @@ namespace Melanzana.MachO
             dataStream = new UnclosableMemoryStream();
             return dataStream;
         }
+
+        internal override IEnumerable<MachLinkEditData> LinkEditData
+        {
+            get
+            {
+                foreach (var section in Sections)
+                {
+                    yield return section.RelocationData;
+                }
+            }
+        }
     }
 }

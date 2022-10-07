@@ -8,19 +8,38 @@ namespace Melanzana.MachO
 {
     public class MachSymbolTable : MachLoadCommand
     {
-        public uint SymbolTableOffset { get; set; }
+        MachObjectFile objectFile;
 
-        public uint NumberOfSymbols { get; set; }
+        public MachSymbolTable(MachObjectFile objectFile)
+        {
+            ArgumentNullException.ThrowIfNull(objectFile);
 
-        public uint StringTableOffset { get; set; }
+            this.objectFile = objectFile;
+            SymbolTableData = new MachLinkEditData();
+            StringTableData = new MachLinkEditData();
+            objectFile.LinkEditData.Add(SymbolTableData);
+            objectFile.LinkEditData.Add(StringTableData);
+        }
 
-        public uint StringTableSize { get; set; }
+        internal MachSymbolTable(
+            MachObjectFile objectFile,
+            MachLinkEditData symbolTableData,
+            MachLinkEditData stringTableData)
+        {
+            ArgumentNullException.ThrowIfNull(objectFile);
+            ArgumentNullException.ThrowIfNull(symbolTableData);
+            ArgumentNullException.ThrowIfNull(stringTableData);
 
-        internal MachSection? SymbolTableSection { get; set; }
+            this.objectFile = objectFile;
+            SymbolTableData = symbolTableData;
+            StringTableData = stringTableData;
+        }
 
-        internal MachSection? StringTableSection { get; set; }
+        public MachLinkEditData SymbolTableData { get; private init; }
 
-        public IEnumerable<MachSymbol> GetReader(MachObjectFile objectFile)
+        public MachLinkEditData StringTableData { get; private init; }
+
+        public IEnumerable<MachSymbol> GetReader()
         {
             var sectionMap = new Dictionary<byte, MachSection>();
             byte sectionIndex = 1;
@@ -30,14 +49,14 @@ namespace Melanzana.MachO
                 Debug.Assert(sectionIndex != 0);
             }
 
-            byte[] stringTable = new byte[StringTableSize];
-            var stringTableStream = objectFile.GetStreamAtFileOffset(StringTableOffset, StringTableSize);
+            byte[] stringTable = new byte[StringTableData.Size];
+            using var stringTableStream = StringTableData.GetReadStream();
             stringTableStream.ReadFully(stringTable);
 
             int symbolSize = SymbolHeader.BinarySize + (objectFile.Is64Bit ? 8 : 4);
             byte[] symbolBuffer = new byte[symbolSize];
-            var symbolTableStream = objectFile.GetStreamAtFileOffset(SymbolTableOffset, (uint)(symbolSize * NumberOfSymbols));
-            for (int i = 0; i < NumberOfSymbols; i++)
+            using var symbolTableStream = SymbolTableData.GetReadStream();
+            while (symbolTableStream.Position < symbolTableStream.Length)
             {
                 symbolTableStream.ReadFully(symbolBuffer);
                 var symbolHeader = SymbolHeader.Read(symbolBuffer, objectFile.IsLittleEndian, out var _);
@@ -74,60 +93,9 @@ namespace Melanzana.MachO
             }
         }
 
-        public MachSymbolTableWriter GetWriter(MachObjectFile objectFile)
+        public MachSymbolTableWriter GetWriter()
         {
-            ArgumentNullException.ThrowIfNull(objectFile);
-
-            // We currently only support writing symbols to object files
-            // and only if the symbol table is part of the unlinked section.
-            if (objectFile.FileType != MachFileType.Object)
-            {
-                throw new NotImplementedException();
-            }
-
-            objectFile.EnsureUnlinkedSegmentExists();
-            Debug.Assert(objectFile.UnlinkedSegment != null);
-
-            if (SymbolTableSection == null)
-            {
-                Debug.Assert(StringTableSection == null);
-
-                if (NumberOfSymbols == 0)
-                {
-                    // Create new section
-                    SymbolTableSection = new MachSection { Type = MachSectionType.Regular };
-                    objectFile.UnlinkedSegment.Sections.Add(SymbolTableSection);
-                    StringTableSection = new MachSection { Type = MachSectionType.Regular };
-                    objectFile.UnlinkedSegment.Sections.Add(StringTableSection);
-                }
-                else
-                {
-                    // Find existing section
-                    SymbolTableSection = objectFile.UnlinkedSegment.Sections.First(s => s.FileOffset == SymbolTableOffset);
-                    StringTableSection = objectFile.UnlinkedSegment.Sections.First(s => s.FileOffset == StringTableOffset);
-                }
-            }
-            else
-            {
-                Debug.Assert(StringTableSection != null);
-            }
-
-            return new MachSymbolTableWriter(objectFile, this, SymbolTableSection, StringTableSection);
-        }
-
-        internal override void UpdateLayout(MachObjectFile objectFile)
-        {
-            if (SymbolTableSection != null)
-            {
-                SymbolTableOffset = SymbolTableSection.FileOffset;
-            }
-
-            if (StringTableSection != null)
-            {
-                StringTableOffset = StringTableSection.FileOffset;
-            }
-
-            base.UpdateLayout(objectFile);
+            return new MachSymbolTableWriter(objectFile, this);
         }
     }
 }

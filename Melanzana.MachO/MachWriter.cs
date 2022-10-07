@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Diagnostics;
+using System.IO;
 using System.Text;
 using Melanzana.MachO.BinaryFormat;
 using Melanzana.Streams;
@@ -238,7 +239,7 @@ namespace Melanzana.MachO
             }
         }
 
-        private static void WriteSymbolTableCommand(Stream stream, MachSymbolTable symbolTable, bool isLittleEndian)
+        private static void WriteSymbolTableCommand(Stream stream, MachSymbolTable symbolTable, bool isLittleEndian, bool is64Bit)
         {
             WriteLoadCommandHeader(
                 stream,
@@ -246,13 +247,15 @@ namespace Melanzana.MachO
                 LoadCommandHeader.BinarySize + SymbolTableCommandHeader.BinarySize,
                 isLittleEndian);
 
+            uint symbolSize = SymbolHeader.BinarySize + (is64Bit ? 8u : 4u);
+
             Span<byte> symbolTableHeaderBuffer = stackalloc byte[SymbolTableCommandHeader.BinarySize];
             var symbolTableHeader = new SymbolTableCommandHeader
             {
-                SymbolTableOffset = symbolTable.SymbolTableOffset,
-                NumberOfSymbols = symbolTable.NumberOfSymbols,
-                StringTableOffset = symbolTable.StringTableOffset,
-                StringTableSize = symbolTable.StringTableSize,
+                SymbolTableOffset = symbolTable.SymbolTableData.FileOffset,
+                NumberOfSymbols = (uint)(symbolTable.SymbolTableData.Size / symbolSize),
+                StringTableOffset = symbolTable.StringTableData.FileOffset,
+                StringTableSize = (uint)symbolTable.StringTableData.Size,
             };
             symbolTableHeader.Write(symbolTableHeaderBuffer, isLittleEndian, out var _);
             stream.Write(symbolTableHeaderBuffer);
@@ -270,6 +273,32 @@ namespace Melanzana.MachO
             var symbolTableHeader = dySymbolTable.Header;
             symbolTableHeader.Write(symbolTableHeaderBuffer, isLittleEndian, out var _);
             stream.Write(symbolTableHeaderBuffer);
+        }
+
+        private static void WriteDyldInfoCommand(Stream stream, MachLoadCommandType commandType, MachDyldInfo dyldInfo, bool isLittleEndian)
+        {
+            WriteLoadCommandHeader(
+                stream,
+                commandType,
+                LoadCommandHeader.BinarySize + DyldInfoHeader.BinarySize,
+                isLittleEndian);
+
+            Span<byte> dyldInfoHeaderBuffer = stackalloc byte[DyldInfoHeader.BinarySize];
+            var dyldInfoHeader = new DyldInfoHeader
+            {
+                RebaseOffset = dyldInfo.RebaseData.FileOffset,
+                RebaseSize = (uint)dyldInfo.RebaseData.Size,
+                BindOffset = dyldInfo.BindData.FileOffset,
+                BindSize = (uint)dyldInfo.BindData.Size,
+                WeakBindOffset = dyldInfo.WeakBindData.FileOffset,
+                WeakBindSize = (uint)dyldInfo.WeakBindData.Size,
+                LazyBindOffset = dyldInfo.LazyBindData.FileOffset,
+                LazyBindSize = (uint)dyldInfo.LazyBindData.Size,
+                ExportOffset = dyldInfo.ExportData.FileOffset,
+                ExportSize = (uint)dyldInfo.ExportData.Size,
+            };
+            dyldInfoHeader.Write(dyldInfoHeaderBuffer, isLittleEndian, out var _);
+            stream.Write(dyldInfoHeaderBuffer);
         }
 
         public static void Write(Stream stream, MachObjectFile objectFile)
@@ -307,8 +336,10 @@ namespace Melanzana.MachO
                     case MachVersionMinTvOS tvOSBuildVersion: WriteVersionMinCommand(loadCommandsStream, MachLoadCommandType.VersionMinTvOS, tvOSBuildVersion, isLittleEndian); break;
                     case MachVersionMinWatchOS watchOSBuildVersion: WriteVersionMinCommand(loadCommandsStream, MachLoadCommandType.VersionMinWatchOS, watchOSBuildVersion, isLittleEndian); break;
                     case MachBuildVersion buildVersion: WriteBuildVersion(loadCommandsStream, buildVersion, isLittleEndian); break;
-                    case MachSymbolTable symbolTable: WriteSymbolTableCommand(loadCommandsStream, symbolTable, isLittleEndian); break;
+                    case MachSymbolTable symbolTable: WriteSymbolTableCommand(loadCommandsStream, symbolTable, isLittleEndian, objectFile.Is64Bit); break;
                     case MachDynamicLinkEditSymbolTable dySymbolTable: WriteDynamicLinkEditSymbolTableCommand(loadCommandsStream, dySymbolTable, isLittleEndian); break;
+                    case MachDyldInfoOnly dyldInfoOnly: WriteDyldInfoCommand(loadCommandsStream, MachLoadCommandType.DyldInfoOnly, dyldInfoOnly, isLittleEndian); break;
+                    case MachDyldInfo dyldInfo: WriteDyldInfoCommand(loadCommandsStream, MachLoadCommandType.DyldInfo, dyldInfo, isLittleEndian); break;
                     case MachCustomLoadCommand customLoadCommand:
                         WriteLoadCommandHeader(loadCommandsStream, customLoadCommand.Type, customLoadCommand.Data.Length + LoadCommandHeader.BinarySize, isLittleEndian);
                         loadCommandsStream.Write(customLoadCommand.Data);
@@ -360,6 +391,7 @@ namespace Melanzana.MachO
             // and fill in the gaps as we go.
             ulong currentOffset = (ulong)(stream.Position - initialOffset);
             var orderedSegments = objectFile.Segments.OrderBy(s => s.FileOffset).ToList();
+            bool writeLinkEditDatas = true;
 
             foreach (var segment in orderedSegments)
             {
@@ -374,6 +406,19 @@ namespace Melanzana.MachO
                             ulong paddingSize = segment.FileOffset - currentOffset;
                             stream.WritePadding((long)paddingSize);
                             currentOffset += paddingSize;
+                        }
+
+                        if (segment.Name == "__LINKEDIT")
+                        {
+                            // __LINKEDIT always has to be the last segment in object file
+
+                            // If any linker data were updated then bail out of the loop at this point and
+                            // use the new data.
+                            writeLinkEditDatas = objectFile.LinkEditData.Any(data => data.HasContentChanged);
+                            if (writeLinkEditDatas)
+                            {
+                                break;
+                            }
                         }
 
                         using var segmentStream = segment.GetReadStream();
@@ -424,6 +469,31 @@ namespace Melanzana.MachO
                             }
                         }
                     }
+                }
+            }
+
+            // We are either writing an unlinked object file or a modified __LINKEDIT segment
+            if (writeLinkEditDatas)
+            {
+                var linkEditData = new List<MachLinkEditData>(objectFile.LinkEditData);
+
+                // Sort by file offset first
+                linkEditData.Sort((sectionA, sectionB) =>
+                    sectionA.FileOffset < sectionB.FileOffset ? -1 :
+                    (sectionA.FileOffset > sectionB.FileOffset ? 1 : 0));
+
+                foreach (var data in linkEditData)
+                {
+                    if (data.FileOffset > currentOffset)
+                    {
+                        ulong paddingSize = data.FileOffset - currentOffset;
+                        stream.WritePadding((long)paddingSize);
+                        currentOffset += paddingSize;
+                    }
+
+                    using var segmentStream = data.GetReadStream();
+                    segmentStream.CopyTo(stream);
+                    currentOffset += (ulong)segmentStream.Length;
                 }
             }
         }

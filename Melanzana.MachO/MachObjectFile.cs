@@ -1,6 +1,7 @@
 using Melanzana.Streams;
 using Melanzana.MachO.BinaryFormat;
 using System.Text;
+using System.Diagnostics;
 
 namespace Melanzana.MachO
 {
@@ -8,7 +9,12 @@ namespace Melanzana.MachO
     {
         private readonly Stream stream;
 
-        public MachObjectFile(Stream stream)
+        public MachObjectFile()
+            : this(Stream.Null)
+        {
+        }
+
+        internal MachObjectFile(Stream stream)
         {
             this.stream = stream;
         }
@@ -29,26 +35,15 @@ namespace Melanzana.MachO
 
         /// <summary>
         /// For object files the relocation, symbol tables and other data are stored at the end of the
-        /// file but not covered by any segment/section. We create an arbitrary segment to make it
+        /// file but not covered by any segment/section. We maintain a list of these data to make it
         /// easier to address.
+        /// 
+        /// For linked files this points to the real __LINKEDIT segment. We slice it into subsections
+        /// based on the known LinkEdit commands though.
         /// </summary>
-        public MachSegment? UnlinkedSegment { get; set; }
+        public IList<MachLinkEditData> LinkEditData { get; } = new List<MachLinkEditData>();
 
-        public IEnumerable<MachSegment> Segments
-        {
-            get
-            {
-                foreach (var segment in LoadCommands.OfType<MachSegment>())
-                {
-                    yield return segment;
-                }
-
-                if (UnlinkedSegment != null)
-                {
-                    yield return UnlinkedSegment;
-                }
-            }
-        }
+        public IEnumerable<MachSegment> Segments => LoadCommands.OfType<MachSegment>();
 
         /// <summary>
         /// Get the lowest file offset of any section in the file. This allows calculating space that is
@@ -56,7 +51,7 @@ namespace Melanzana.MachO
         /// </summary>
         public ulong GetLowestSectionFileOffset()
         {
-            ulong lowestFileOffset = (ulong)stream.Length;
+            ulong lowestFileOffset = ulong.MaxValue;
 
             foreach (var segment in Segments)
             {
@@ -70,7 +65,7 @@ namespace Melanzana.MachO
                 }
             }
 
-            return lowestFileOffset;
+            return lowestFileOffset == ulong.MaxValue ? 0 : lowestFileOffset;
         }
 
         public ulong GetSize()
@@ -181,6 +176,8 @@ namespace Melanzana.MachO
 
         public void UpdateLayout()
         {
+            // TODO: Change the layout only if necessary!
+
             long position = 0;
 
             // 4 bytes magic number
@@ -292,20 +289,7 @@ namespace Melanzana.MachO
                 segment.Size = segmentSize;
             }
 
-            foreach (var loadCommand in LoadCommands)
-            {
-                loadCommand.UpdateLayout(this);
-            }
-
             static int AlignedSize(int size, bool is64bit) => is64bit ? (size + 7) & ~7 : (size + 3) & ~3;
-        }
-
-        internal void EnsureUnlinkedSegmentExists()
-        {
-            if (UnlinkedSegment == null)
-            {
-                UnlinkedSegment = new MachSegment();
-            }
         }
     }
 }

@@ -21,7 +21,7 @@ namespace Melanzana.MachO.Tests
 
             var symbolTable = objectFile.LoadCommands.OfType<MachSymbolTable>().FirstOrDefault();
             Assert.NotNull(symbolTable);
-            var symbols = symbolTable!.GetReader(objectFile).ToArray();
+            var symbols = symbolTable!.GetReader().ToArray();
             Assert.Equal(2, symbols.Length);
             Assert.Equal("__mh_execute_header", symbols[0].Name);
             Assert.Equal(0x100000000u, symbols[0].Value);
@@ -55,7 +55,7 @@ namespace Melanzana.MachO.Tests
             Assert.Equal("__LD", compactUnwindSection.SegmentName);
             Assert.Equal("__compact_unwind", compactUnwindSection.SectionName);
 
-            var relocations = compactUnwindSection.GetRelocationReader(objectFile);
+            var relocations = compactUnwindSection.GetRelocationReader();
             Assert.Single(relocations);
             var relec0 = relocations.First();
             Assert.Equal(0, relec0.Address);
@@ -67,7 +67,7 @@ namespace Melanzana.MachO.Tests
 
             var symbolTable = objectFile.LoadCommands.OfType<MachSymbolTable>().FirstOrDefault();
             Assert.NotNull(symbolTable);
-            var symbols = symbolTable!.GetReader(objectFile).ToArray();
+            var symbols = symbolTable!.GetReader().ToArray();
             Assert.Equal("ltmp0", symbols[0].Name);
             Assert.Equal(textSection, symbols[0].Section);
             Assert.Equal(0u, symbols[0].Value);

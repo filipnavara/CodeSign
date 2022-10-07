@@ -21,15 +21,19 @@ namespace Melanzana.MachO
     /// </remarks>
     public class MachSegment : MachLoadCommand
     {
+        private MachObjectFile objectFile;
         private Stream? dataStream;
 
-        public MachSegment()
+        public MachSegment(MachObjectFile objectFile, string name)
+            : this(objectFile, name, null)
         {
         }
 
-        public MachSegment(Stream stream)
+        public MachSegment(MachObjectFile objectFile, string name, Stream? stream)
         {
-            dataStream = stream;
+            this.objectFile = objectFile;
+            this.dataStream = stream;
+            this.Name = name;
         }
 
         /// <summary>
@@ -42,8 +46,6 @@ namespace Melanzana.MachO
         public ulong FileOffset { get; set; }
 
         internal ulong OriginalFileSize { get; set; }
-
-        internal bool IsObjectFile;
 
         /// <summary>
         /// Gets the size of the segment in the file.
@@ -62,7 +64,7 @@ namespace Melanzana.MachO
                 {
                     if (Sections.Any(s => s.HasContentChanged))
                     {
-                        if (IsObjectFile)
+                        if (objectFile.FileType == MachFileType.Object)
                         {
                             return Sections.Where(s => s.IsInFile).Select(s => s.FileOffset + s.Size).Max() - FileOffset;
                         }
@@ -85,7 +87,7 @@ namespace Melanzana.MachO
         /// <summary>
         /// Gets or sets the name of this segment.
         /// </summary>
-        public string Name { get; set; } = string.Empty;
+        public string Name { get; private set; } = string.Empty;
 
         /// <summary>
         /// Gets or sets the virtual address of this section.
@@ -146,16 +148,6 @@ namespace Melanzana.MachO
 
             dataStream = new UnclosableMemoryStream();
             return dataStream;
-        }
-
-        internal override void UpdateLayout(MachObjectFile objectFile)
-        {
-            IsObjectFile = objectFile.FileType == MachFileType.Object;
-
-            foreach (var section in Sections)
-                section.UpdateLayout(objectFile);
-
-            base.UpdateLayout(objectFile);
         }
     }
 }

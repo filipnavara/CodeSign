@@ -1,9 +1,7 @@
 using System.Buffers.Binary;
 using System.Diagnostics;
-using System.Runtime.CompilerServices;
 using System.Text;
 using Melanzana.MachO.BinaryFormat;
-using Melanzana.Streams;
 
 namespace Melanzana.MachO
 {
@@ -11,8 +9,6 @@ namespace Melanzana.MachO
     {
         MachObjectFile objectFile;
         MachSymbolTable symbolTable;
-        MachSection symbolTableSection;
-        MachSection stringTableSection;
         List<MachSymbol> localSymbols = new();
         List<MachSymbol> externalSymbols = new();
         List<MachSymbol> undefinedSymbols = new();
@@ -20,14 +16,10 @@ namespace Melanzana.MachO
 
         internal MachSymbolTableWriter(
             MachObjectFile objectFile,
-            MachSymbolTable symbolTable,
-            MachSection symbolTableSection,
-            MachSection stringTableSection)
+            MachSymbolTable symbolTable)
         {
             this.objectFile = objectFile;
             this.symbolTable = symbolTable;
-            this.symbolTableSection = symbolTableSection;
-            this.stringTableSection = stringTableSection;
         }
 
         public void AddSymbol(MachSymbol symbol)
@@ -75,8 +67,8 @@ namespace Melanzana.MachO
                     Debug.Assert(sectionIndex != 0);
                 }
 
-                using var stringTableWriter = stringTableSection.GetWriteStream();
-                using var symbolTableWriter = symbolTableSection.GetWriteStream();
+                using var stringTableWriter = symbolTable.StringTableData.GetWriteStream();
+                using var symbolTableWriter = symbolTable.SymbolTableData.GetWriteStream();
 
                 // Start the table with a NUL byte.
                 stringTableWriter.WriteByte(0);
@@ -136,11 +128,6 @@ namespace Melanzana.MachO
                 while ((stringTableWriter.Position & (alignment - 1)) != 0)
                     stringTableWriter.WriteByte(0);
 
-                symbolTable.NumberOfSymbols =
-                    (uint)(localSymbols.Count +
-                    externalSymbols.Count +
-                    undefinedSymbols.Count);
-                symbolTable.StringTableSize = (uint)stringTableWriter.Position;
 
                 disposed = true;
             }

@@ -4,14 +4,10 @@ namespace Melanzana.MachO
 {
     public abstract class MachLinkEdit : MachLoadCommand
     {
-        public uint FileOffset { get; set; }
+        public uint FileOffset => Data.FileOffset;
 
-        public uint FileSize { get; set; }
+        public uint FileSize => (uint)Data.Size;
 
-        internal void Validate(MachSegment linkEditSegment)
-        {
-            Debug.Assert(FileOffset >= linkEditSegment.FileOffset);
-            Debug.Assert(FileOffset + FileSize <= linkEditSegment.FileOffset + linkEditSegment.FileSize);
-        }
+        public MachLinkEditData Data { get; init; }
     }
 }

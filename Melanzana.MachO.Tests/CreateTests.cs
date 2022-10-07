@@ -12,7 +12,7 @@ namespace Melanzana.MachO.Tests
         public void CreateExecutable()
         {
             // Let's try to build a new macho!
-            var objectFile = new MachObjectFile(Stream.Null);
+            var objectFile = new MachObjectFile();
 
             // Header
             objectFile.CpuType = MachCpuType.Arm64;
@@ -20,29 +20,28 @@ namespace Melanzana.MachO.Tests
             objectFile.Flags = MachHeaderFlags.PIE | MachHeaderFlags.TwoLevel | MachHeaderFlags.DynamicLink | MachHeaderFlags.NoUndefinedReferences;
 
             // Segments
-            var pageZeroSegement = new MachSegment
+            var pageZeroSegment = new MachSegment(objectFile, "__PAGEZERO")
             {
-                Name = "__PAGEZERO",
                 VirtualAddress = 0,
-                Size = 0x100000000
+                Size = 0x100000000,
             };
-            var textSegment = new MachSegment
+
+            var textSegment = new MachSegment(objectFile, "__TEXT")
             {
-                Name = "__TEXT",
                 FileOffset = 0,
                 VirtualAddress = 0x100000000,
                 Size = 0x4000,
                 InitialProtection = MachVmProtection.Execute | MachVmProtection.Read,
                 MaximumProtection = MachVmProtection.Execute | MachVmProtection.Read,
             };
-            var textSection = new MachSection
+
+            var textSection = new MachSection(objectFile, "__TEXT", "__text")
             {
-                SectionName = "__text",
-                SegmentName = "__TEXT",
                 Log2Alignment = 2,
                 Type = MachSectionType.Regular,
                 Attributes = MachSectionAttributes.SomeInstructions | MachSectionAttributes.PureInstructions,
             };
+
             using (var textWriter = textSection.GetWriteStream())
             {
                 textWriter.Write(new byte[] { 0x00, 0x00, 0x80, 0x52 }); // mov w0, #0
@@ -50,9 +49,9 @@ namespace Melanzana.MachO.Tests
                 textSection.FileOffset = 0x4000u - (uint)textWriter.Position;
                 textSection.VirtualAddress = textSegment.VirtualAddress + textSection.FileOffset;
             }
-            var linkEditSegment = new MachSegment
+
+            var linkEditSegment = new MachSegment(objectFile, "__LINKEDIT")
             {
-                Name = "__LINKEDIT",
                 VirtualAddress = textSection.VirtualAddress + textSection.Size,
                 // FileOffset = 
                 // FileSize =
@@ -66,7 +65,7 @@ namespace Melanzana.MachO.Tests
         [Fact]
         public void CreateObjectFile()
         {
-            var objectFile = new MachObjectFile(Stream.Null);
+            var objectFile = new MachObjectFile();
 
             objectFile.CpuType = MachCpuType.Arm64;
             objectFile.CpuSubType = 0;
@@ -74,26 +73,21 @@ namespace Melanzana.MachO.Tests
             objectFile.Flags = MachHeaderFlags.SubsectionsViaSymbols;
             objectFile.IsLittleEndian = true;
 
-            var segment = new MachSegment
+            var segment = new MachSegment(objectFile, "")
             {
-                Name = "",
                 InitialProtection = MachVmProtection.Execute | MachVmProtection.Read | MachVmProtection.Write,
                 MaximumProtection = MachVmProtection.Execute | MachVmProtection.Read | MachVmProtection.Write,
             };
 
-            var textSection = new MachSection
+            var textSection = new MachSection(objectFile, "__TEXT", "__text")
             {
-                SectionName = "__text",
-                SegmentName = "__TEXT",
                 Log2Alignment = 2,
                 Type = MachSectionType.Regular,
                 Attributes = MachSectionAttributes.SomeInstructions | MachSectionAttributes.PureInstructions,
             };
 
-            var compactUnwindSection = new MachSection
+            var compactUnwindSection = new MachSection(objectFile, "__LD", "__compact_unwind")
             {
-                SectionName = "__compact_unwind",
-                SegmentName = "__LD",
                 Log2Alignment = 3,
                 Type = MachSectionType.Regular,
                 Attributes = MachSectionAttributes.Debug,
@@ -113,7 +107,7 @@ namespace Melanzana.MachO.Tests
             }
 
             using (var compactUnwindWriter = compactUnwindSection.GetWriteStream())
-            using (var compactUnwindRelocWriter = compactUnwindSection.GetRelocationWriter(objectFile))
+            using (var compactUnwindRelocWriter = compactUnwindSection.GetRelocationWriter())
             {
                 // Address of _main
                 compactUnwindRelocWriter.AddRelocation(new MachRelocation
@@ -140,9 +134,9 @@ namespace Melanzana.MachO.Tests
                 SdkVersion = new Version(12, 0, 0),
             });
 
-            var symbolTable = new MachSymbolTable();
+            var symbolTable = new MachSymbolTable(objectFile);
             objectFile.LoadCommands.Add(symbolTable);
-            using (var symbolTableWriter = symbolTable.GetWriter(objectFile))
+            using (var symbolTableWriter = symbolTable.GetWriter())
             {
                 // FIXME: Values
                 symbolTableWriter.AddSymbol(new MachSymbol { Name = "ltmp0", Section = textSection, Value = 0, Descriptor = 0, Type = MachSymbolType.Section });
@@ -154,7 +148,7 @@ namespace Melanzana.MachO.Tests
             objectFile.UpdateLayout();
 
             // Ensure that write doesn't crash
-            var binaryFile = new MemoryStream();            
+            var binaryFile = new MemoryStream();
             MachWriter.Write(binaryFile, objectFile);
             Assert.Equal(528, binaryFile.Length);
 

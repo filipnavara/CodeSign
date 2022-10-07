@@ -8,16 +8,15 @@ namespace Melanzana.MachO
         private MachSection section;
         private Stream relocationStream;
 
-        internal MachRelocationWriter(MachObjectFile objectFile, MachSection section, MachSection relocationSection)
+        internal MachRelocationWriter(MachObjectFile objectFile, MachSection section, MachLinkEditData relocationData)
         {
             this.objectFile = objectFile;
             this.section = section;
-            this.relocationStream = relocationSection.GetWriteStream();
+            this.relocationStream = relocationData.GetWriteStream();
         }
 
         public void Dispose()
         {
-            this.section.NumberOfReloationEntries = (uint)(this.relocationStream.Length / 8);
             this.relocationStream.Dispose();
         }
 

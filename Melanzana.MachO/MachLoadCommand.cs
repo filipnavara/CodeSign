@@ -5,9 +5,5 @@ namespace Melanzana.MachO
         protected MachLoadCommand()
         {
         }
-
-        internal virtual void UpdateLayout(MachObjectFile objectFile)
-        {
-        }
     }
 }

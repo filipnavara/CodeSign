@@ -35,3 +35,8 @@ jobs:
       with:
         name: melanzana-${{ steps.nbgv.outputs.SemVer2 }}
         path: nuget/
+    - name: Publish NuGet packages to NuGet feed
+      run: |
+        dotnet nuget add source --username USERNAME --password ${{ secrets.GITHUB_TOKEN }} --store-password-in-clear-text --name github "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
+        dotnet nuget push "nuget/*.nupkg"  --api-key ${{ secrets.GITHUB_TOKEN }} --source "github"
+      if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}

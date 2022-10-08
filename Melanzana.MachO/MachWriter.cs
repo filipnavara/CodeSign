@@ -301,6 +301,24 @@ namespace Melanzana.MachO
             stream.Write(dyldInfoHeaderBuffer);
         }
 
+        private static void WriteTwoLevelHintsCommand(Stream stream, MachTwoLevelHints twoLevelHints, bool isLittleEndian)
+        {
+            WriteLoadCommandHeader(
+                stream,
+                MachLoadCommandType.TowLevelHints,
+                LoadCommandHeader.BinarySize + DyldInfoHeader.BinarySize,
+                isLittleEndian);
+
+            Span<byte> twoLevelHintsHeaderBuffer = stackalloc byte[TwoLevelHintsHeader.BinarySize];
+            var twoLevelHintsHeader = new TwoLevelHintsHeader
+            {
+                FileOffset = twoLevelHints.Data.FileOffset,
+                NumberOfHints = (uint)(twoLevelHints.Data.Size / sizeof(uint))
+            };
+            twoLevelHintsHeader.Write(twoLevelHintsHeaderBuffer, isLittleEndian, out var _);
+            stream.Write(twoLevelHintsHeaderBuffer);
+        }
+
         public static void Write(Stream stream, MachObjectFile objectFile)
         {
             long initialOffset = stream.Position;
@@ -340,6 +358,7 @@ namespace Melanzana.MachO
                     case MachDynamicLinkEditSymbolTable dySymbolTable: WriteDynamicLinkEditSymbolTableCommand(loadCommandsStream, dySymbolTable, isLittleEndian); break;
                     case MachDyldInfoOnly dyldInfoOnly: WriteDyldInfoCommand(loadCommandsStream, MachLoadCommandType.DyldInfoOnly, dyldInfoOnly, isLittleEndian); break;
                     case MachDyldInfo dyldInfo: WriteDyldInfoCommand(loadCommandsStream, MachLoadCommandType.DyldInfo, dyldInfo, isLittleEndian); break;
+                    case MachTwoLevelHints twoLevelHints: WriteTwoLevelHintsCommand(loadCommandsStream, twoLevelHints, isLittleEndian); break;
                     case MachCustomLoadCommand customLoadCommand:
                         WriteLoadCommandHeader(loadCommandsStream, customLoadCommand.Type, customLoadCommand.Data.Length + LoadCommandHeader.BinarySize, isLittleEndian);
                         loadCommandsStream.Write(customLoadCommand.Data);

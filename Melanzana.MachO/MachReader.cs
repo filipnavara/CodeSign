@@ -229,7 +229,7 @@ namespace Melanzana.MachO
             return new MachDynamicLinkEditSymbolTable(dynamicSymbolTableHeader);
         }
 
-        private static T ReadMachDyldInfo<T>(ReadOnlySpan<byte> loadCommandPtr, MachObjectFile objectFile, Stream stream)
+        private static T ReadDyldInfo<T>(ReadOnlySpan<byte> loadCommandPtr, MachObjectFile objectFile, Stream stream)
             where T : MachDyldInfo, new()
         {
             var dyldInfoHeader = DyldInfoHeader.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), objectFile.IsLittleEndian, out var _);
@@ -243,6 +243,16 @@ namespace Melanzana.MachO
                 LazyBindData = new MachLinkEditData(stream, dyldInfoHeader.LazyBindOffset, dyldInfoHeader.LazyBindSize),
                 ExportData = new MachLinkEditData(stream, dyldInfoHeader.ExportOffset, dyldInfoHeader.ExportSize),
             };
+        }
+
+        private static MachTwoLevelHints ReadTwoLevelHints(ReadOnlySpan<byte> loadCommandPtr, MachObjectFile objectFile, Stream stream)
+        {
+            var twoLevelHintsHeader = TwoLevelHintsHeader.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), objectFile.IsLittleEndian, out var _);
+
+            return new MachTwoLevelHints(new MachLinkEditData(
+                stream,
+                twoLevelHintsHeader.FileOffset,
+                twoLevelHintsHeader.NumberOfHints * sizeof(uint)));
         }
 
         private static MachObjectFile ReadSingle(FatArchHeader? fatArchHeader, MachMagic magic, Stream stream)
@@ -316,8 +326,9 @@ namespace Melanzana.MachO
                     MachLoadCommandType.BuildVersion => ReadBuildVersion(loadCommandPtr, isLittleEndian),
                     MachLoadCommandType.SymbolTable => ReadSymbolTable(loadCommandPtr, objectFile, stream),
                     MachLoadCommandType.DynamicLinkEditSymbolTable => ReadDynamicLinkEditSymbolTable(loadCommandPtr, isLittleEndian),
-                    MachLoadCommandType.DyldInfo => ReadMachDyldInfo<MachDyldInfo>(loadCommandPtr, objectFile, stream),
-                    MachLoadCommandType.DyldInfoOnly => ReadMachDyldInfo<MachDyldInfoOnly>(loadCommandPtr, objectFile, stream),
+                    MachLoadCommandType.DyldInfo => ReadDyldInfo<MachDyldInfo>(loadCommandPtr, objectFile, stream),
+                    MachLoadCommandType.DyldInfoOnly => ReadDyldInfo<MachDyldInfoOnly>(loadCommandPtr, objectFile, stream),
+                    MachLoadCommandType.TowLevelHints => ReadTwoLevelHints(loadCommandPtr, objectFile, stream),
                     _ => new MachCustomLoadCommand(loadCommandHeader.CommandType, loadCommandPtr.Slice(LoadCommandHeader.BinarySize, (int)loadCommandHeader.CommandSize - LoadCommandHeader.BinarySize).ToArray()),
                 });
                 loadCommandPtr = loadCommandPtr.Slice((int)loadCommandHeader.CommandSize);

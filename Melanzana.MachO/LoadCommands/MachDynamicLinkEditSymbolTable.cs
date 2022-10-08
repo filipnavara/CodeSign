@@ -15,7 +15,12 @@ namespace Melanzana.MachO
             this.Header = new DynamicSymbolTableCommandHeader();
         }
 
-        public MachDynamicLinkEditSymbolTable(DynamicSymbolTableCommandHeader header)
+        public MachDynamicLinkEditSymbolTable(MachSymbolTable symbolTable)
+        {
+            this.Header = ((MachSymbolTableCollection)symbolTable.Symbols).CreateDynamicLinkEditSymbolTable();
+        }
+
+        internal MachDynamicLinkEditSymbolTable(DynamicSymbolTableCommandHeader header)
         {
             this.Header = header;
         }

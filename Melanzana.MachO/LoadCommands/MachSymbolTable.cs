@@ -70,14 +70,6 @@ namespace Melanzana.MachO
             }
         }
 
-        public MachDynamicLinkEditSymbolTable CreateDynamicLinkEditSymbolTable()
-        {
-            // Make sure the symbol table is read
-            _ = Symbols;
-            Debug.Assert(symbolTableCollection != null);
-            return symbolTableCollection.CreateDynamicLinkEditSymbolTable();
-        }
-
         internal override IEnumerable<MachLinkEditData> LinkEditData
         {
             get

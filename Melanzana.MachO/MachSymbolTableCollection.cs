@@ -171,10 +171,10 @@ namespace Melanzana.MachO
             return GetEnumerator();
         }
 
-        public MachDynamicLinkEditSymbolTable CreateDynamicLinkEditSymbolTable()
+        public DynamicSymbolTableCommandHeader CreateDynamicLinkEditSymbolTable()
         {
             // NOTE: Match the order of WriteSymbols in FlushIfDirty
-            return new MachDynamicLinkEditSymbolTable
+            return new DynamicSymbolTableCommandHeader
             {
                 LocalSymbolsIndex = 0,
                 LocalSymbolsCount = (uint)localSymbols.Count,

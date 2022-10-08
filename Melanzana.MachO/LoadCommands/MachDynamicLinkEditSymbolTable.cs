@@ -36,7 +36,7 @@ namespace Melanzana.MachO
 
                     if (bucketUsed[bucket])
                     {
-                        // Different types of symbols have to be next to each other
+                        // Same types of symbols have to be next to each other
                         throw new InvalidOperationException("Symbol table is not in correct order");
                     }
                     bucketUsed[bucket] = true;

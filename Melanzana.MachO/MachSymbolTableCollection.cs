@@ -174,7 +174,7 @@ namespace Melanzana.MachO
         public MachDynamicLinkEditSymbolTable CreateDynamicLinkEditSymbolTable()
         {
             // NOTE: Match the order of WriteSymbols in FlushIfDirty
-            return new MachDynamicLinkEditSymbolTable(new DynamicSymbolTableCommandHeader
+            return new MachDynamicLinkEditSymbolTable
             {
                 LocalSymbolsIndex = 0,
                 LocalSymbolsCount = (uint)localSymbols.Count,
@@ -182,7 +182,7 @@ namespace Melanzana.MachO
                 ExternalSymbolsCount = (uint)externalSymbols.Count,
                 UndefinedSymbolsIndex = (uint)(localSymbols.Count + externalSymbols.Count),
                 UndefinedSymbolsCount = (uint)undefinedSymbols.Count,
-            });
+            };
         }
 
         public void FlushIfDirty()

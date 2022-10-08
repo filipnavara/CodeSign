@@ -1,14 +1,35 @@
-using static System.Collections.Specialized.BitVector32;
-
 namespace Melanzana.MachO
 {
     public class MachDyldInfo : MachLoadCommand
     {
-        public MachLinkEditData RebaseData { get; init; }
-        public MachLinkEditData BindData { get; init; }
-        public MachLinkEditData WeakBindData { get; init; }
-        public MachLinkEditData LazyBindData { get; init; }
-        public MachLinkEditData ExportData { get; init; }
+        public MachDyldInfo()
+        {
+            RebaseData = new MachLinkEditData();
+            BindData = new MachLinkEditData();
+            WeakBindData = new MachLinkEditData();
+            LazyBindData = new MachLinkEditData();
+            ExportData = new MachLinkEditData();
+        }
+
+        public MachDyldInfo(
+            MachLinkEditData rebaseData,
+            MachLinkEditData bindData,
+            MachLinkEditData weakBindData,
+            MachLinkEditData lazyBindData,
+            MachLinkEditData exportData)
+        {
+            RebaseData = rebaseData;
+            BindData = bindData;
+            WeakBindData = weakBindData;
+            LazyBindData = lazyBindData;
+            ExportData = exportData;
+        }
+
+        public MachLinkEditData RebaseData { get; private init; }
+        public MachLinkEditData BindData { get; private init; }
+        public MachLinkEditData WeakBindData { get; private init; }
+        public MachLinkEditData LazyBindData { get; private init; }
+        public MachLinkEditData ExportData { get; private init; }
 
         internal override IEnumerable<MachLinkEditData> LinkEditData
         {

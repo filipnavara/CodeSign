@@ -49,25 +49,18 @@ namespace Melanzana.CodeSign
             else
             {
                 // Create new code signature command
-                var codeSignatureData = new MachLinkEditData();
+                var codeSignatureData = new MachLinkEditData
+                {
+                    FileOffset = (uint)machO.GetSigningLimit(),
+                    Size = codeSignatureSize
+                };
 
-                codeSignatureData.FileOffset = (uint)machO.GetSigningLimit();
-                codeSignatureData.Size = codeSignatureSize;
-
-                codeSignatureCommand = new MachCodeSignature { Data = codeSignatureData };
+                codeSignatureCommand = new MachCodeSignature(codeSignatureData);
                 machO.LoadCommands.Add(codeSignatureCommand);
                 oldSignatureSize = 0;
 
-                // Update __LINKEDIT segment to include the newly created command
+                // The __LINKEDIT segment is computed automatically to accomodate the newly created command
             }
-
-            // NOTE: Setting MachLinkEdit section size should add the necessary padding
-            /*using var oldLinkEditContent = linkEditSegment.GetReadStream();
-            using var newLinkEditContent = linkEditSegment.GetWriteStream();
-
-            long bytesToCopy = oldLinkEditContent.Length - oldSignatureSize;
-            oldLinkEditContent.Slice(0, bytesToCopy).CopyTo(newLinkEditContent);
-            newLinkEditContent.WritePadding(codeSignatureSize);*/
         }
     }
 }

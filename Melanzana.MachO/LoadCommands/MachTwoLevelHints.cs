@@ -4,7 +4,7 @@ namespace Melanzana.MachO
 {
     public class MachTwoLevelHints : MachLoadCommand
     {
-        public MachTwoLevelHints(MachLinkEditData data)
+        public MachTwoLevelHints(MachObjectFile objectFile, MachLinkEditData data)
         {
             Data = data;
         }

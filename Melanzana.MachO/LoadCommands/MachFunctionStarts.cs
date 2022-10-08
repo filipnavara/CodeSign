@@ -2,12 +2,13 @@ namespace Melanzana.MachO
 {
     public class MachFunctionStarts : MachLinkEdit
     {
-        public MachFunctionStarts()
+        public MachFunctionStarts(MachObjectFile objectFile)
+            : base(objectFile)
         {
         }
 
-        public MachFunctionStarts(MachLinkEditData data)
-            : base(data)
+        public MachFunctionStarts(MachObjectFile objectFile, MachLinkEditData data)
+            : base(objectFile, data)
         {
         }
     }

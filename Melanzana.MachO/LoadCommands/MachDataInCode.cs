@@ -2,12 +2,13 @@ namespace Melanzana.MachO
 {
     public class MachDataInCode : MachLinkEdit
     {
-        public MachDataInCode()
+        public MachDataInCode(MachObjectFile objectFile)
+            : base(objectFile)
         {
         }
 
-        public MachDataInCode(MachLinkEditData data)
-            : base(data)
+        public MachDataInCode(MachObjectFile objectFile, MachLinkEditData data)
+            : base(objectFile, data)
         {
         }
     }

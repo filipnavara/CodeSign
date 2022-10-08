@@ -2,12 +2,13 @@ namespace Melanzana.MachO
 {
     public class MachDyldChainedFixups : MachLinkEdit
     {
-        public MachDyldChainedFixups()
+        public MachDyldChainedFixups(MachObjectFile objectFile)
+            : base(objectFile)
         {
         }
 
-        public MachDyldChainedFixups(MachLinkEditData data)
-            : base(data)
+        public MachDyldChainedFixups(MachObjectFile objectFile, MachLinkEditData data)
+            : base(objectFile, data)
         {
         }
     }

@@ -241,20 +241,21 @@ namespace Melanzana.MachO
 
             if (loadCommandType == MachLoadCommandType.DyldInfo)
             {
-                return new MachDyldInfo(rebaseData, bindData, weakBindData, lazyBindData, exportData);
+                return new MachDyldInfo(objectFile, rebaseData, bindData, weakBindData, lazyBindData, exportData);
             }
 
-            return new MachDyldInfoOnly(rebaseData, bindData, weakBindData, lazyBindData, exportData);
+            return new MachDyldInfoOnly(objectFile, rebaseData, bindData, weakBindData, lazyBindData, exportData);
         }
 
         private static MachTwoLevelHints ReadTwoLevelHints(ReadOnlySpan<byte> loadCommandPtr, MachObjectFile objectFile, Stream stream)
         {
             var twoLevelHintsHeader = TwoLevelHintsHeader.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), objectFile.IsLittleEndian, out var _);
 
-            return new MachTwoLevelHints(new MachLinkEditData(
-                stream,
-                twoLevelHintsHeader.FileOffset,
-                twoLevelHintsHeader.NumberOfHints * sizeof(uint)));
+            return new MachTwoLevelHints(objectFile,
+                new MachLinkEditData(
+                    stream,
+                    twoLevelHintsHeader.FileOffset,
+                    twoLevelHintsHeader.NumberOfHints * sizeof(uint)));
         }
 
         private static MachObjectFile ReadSingle(FatArchHeader? fatArchHeader, MachMagic magic, Stream stream)
@@ -309,14 +310,14 @@ namespace Melanzana.MachO
                 {
                     MachLoadCommandType.Segment => ReadSegment(loadCommandPtr, objectFile, stream),
                     MachLoadCommandType.Segment64 => ReadSegment64(loadCommandPtr, objectFile, stream),
-                    MachLoadCommandType.CodeSignature => new MachCodeSignature(ReadLinkEdit(loadCommandPtr, objectFile, stream)),
-                    MachLoadCommandType.DylibCodeSigningDRs => new MachDylibCodeSigningDirs(ReadLinkEdit(loadCommandPtr, objectFile, stream)),
-                    MachLoadCommandType.SegmentSplitInfo => new MachSegmentSplitInfo(ReadLinkEdit(loadCommandPtr, objectFile, stream)),
-                    MachLoadCommandType.FunctionStarts => new MachFunctionStarts(ReadLinkEdit(loadCommandPtr, objectFile, stream)),
-                    MachLoadCommandType.DataInCode => new MachDataInCode(ReadLinkEdit(loadCommandPtr, objectFile, stream)),
-                    MachLoadCommandType.LinkerOptimizationHint => new MachLinkerOptimizationHint(ReadLinkEdit(loadCommandPtr, objectFile, stream)),
-                    MachLoadCommandType.DyldExportsTrie => new MachDyldExportsTrie(ReadLinkEdit(loadCommandPtr, objectFile, stream)),
-                    MachLoadCommandType.DyldChainedFixups => new MachDyldChainedFixups(ReadLinkEdit(loadCommandPtr, objectFile, stream)),
+                    MachLoadCommandType.CodeSignature => new MachCodeSignature(objectFile, ReadLinkEdit(loadCommandPtr, objectFile, stream)),
+                    MachLoadCommandType.DylibCodeSigningDRs => new MachDylibCodeSigningDirs(objectFile, ReadLinkEdit(loadCommandPtr, objectFile, stream)),
+                    MachLoadCommandType.SegmentSplitInfo => new MachSegmentSplitInfo(objectFile, ReadLinkEdit(loadCommandPtr, objectFile, stream)),
+                    MachLoadCommandType.FunctionStarts => new MachFunctionStarts(objectFile, ReadLinkEdit(loadCommandPtr, objectFile, stream)),
+                    MachLoadCommandType.DataInCode => new MachDataInCode(objectFile, ReadLinkEdit(loadCommandPtr, objectFile, stream)),
+                    MachLoadCommandType.LinkerOptimizationHint => new MachLinkerOptimizationHint(objectFile, ReadLinkEdit(loadCommandPtr, objectFile, stream)),
+                    MachLoadCommandType.DyldExportsTrie => new MachDyldExportsTrie(objectFile, ReadLinkEdit(loadCommandPtr, objectFile, stream)),
+                    MachLoadCommandType.DyldChainedFixups => new MachDyldChainedFixups(objectFile, ReadLinkEdit(loadCommandPtr, objectFile, stream)),
                     MachLoadCommandType.LoadDylib => ReadDylibCommand<MachLoadDylibCommand>(loadCommandPtr, loadCommandHeader.CommandSize, isLittleEndian),
                     MachLoadCommandType.LoadWeakDylib => ReadDylibCommand<MachLoadWeakDylibCommand>(loadCommandPtr, loadCommandHeader.CommandSize, isLittleEndian),
                     MachLoadCommandType.ReexportDylib => ReadDylibCommand<MachReexportDylibCommand>(loadCommandPtr, loadCommandHeader.CommandSize, isLittleEndian),

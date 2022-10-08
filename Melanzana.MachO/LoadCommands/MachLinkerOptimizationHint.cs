@@ -2,12 +2,13 @@ namespace Melanzana.MachO
 {
     public class MachLinkerOptimizationHint : MachLinkEdit
     {
-        public MachLinkerOptimizationHint()
+        public MachLinkerOptimizationHint(MachObjectFile objectFile)
+            : base(objectFile)
         {
         }
 
-        public MachLinkerOptimizationHint(MachLinkEditData data)
-            : base(data)
+        public MachLinkerOptimizationHint(MachObjectFile objectFile, MachLinkEditData data)
+            : base(objectFile, data)
         {
         }
     }

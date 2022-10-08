@@ -2,16 +2,23 @@ namespace Melanzana.MachO
 {
     public abstract class MachLinkEdit : MachLoadCommand
     {
-        protected MachLinkEdit()
+        protected readonly MachObjectFile objectFile;
+
+        protected MachLinkEdit(MachObjectFile objectFile)
         {
+            ArgumentNullException.ThrowIfNull(objectFile);
+
             Data = new MachLinkEditData();
+            this.objectFile = objectFile;
         }
 
-        protected MachLinkEdit(MachLinkEditData data)
+        protected MachLinkEdit(MachObjectFile objectFile, MachLinkEditData data)
         {
+            ArgumentNullException.ThrowIfNull(objectFile);
             ArgumentNullException.ThrowIfNull(data);
 
             Data = data;
+            this.objectFile = objectFile;
         }
 
         public uint FileOffset => Data.FileOffset;

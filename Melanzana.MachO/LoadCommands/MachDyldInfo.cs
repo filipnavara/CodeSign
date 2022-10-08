@@ -2,8 +2,10 @@ namespace Melanzana.MachO
 {
     public class MachDyldInfo : MachLoadCommand
     {
-        public MachDyldInfo()
+        public MachDyldInfo(MachObjectFile objectFile)
         {
+            ArgumentNullException.ThrowIfNull(objectFile);
+
             RebaseData = new MachLinkEditData();
             BindData = new MachLinkEditData();
             WeakBindData = new MachLinkEditData();
@@ -12,12 +14,20 @@ namespace Melanzana.MachO
         }
 
         public MachDyldInfo(
+            MachObjectFile objectFile,
             MachLinkEditData rebaseData,
             MachLinkEditData bindData,
             MachLinkEditData weakBindData,
             MachLinkEditData lazyBindData,
             MachLinkEditData exportData)
         {
+            ArgumentNullException.ThrowIfNull(objectFile);
+            ArgumentNullException.ThrowIfNull(rebaseData);
+            ArgumentNullException.ThrowIfNull(bindData);
+            ArgumentNullException.ThrowIfNull(weakBindData);
+            ArgumentNullException.ThrowIfNull(lazyBindData);
+            ArgumentNullException.ThrowIfNull(exportData);
+
             RebaseData = rebaseData;
             BindData = bindData;
             WeakBindData = weakBindData;

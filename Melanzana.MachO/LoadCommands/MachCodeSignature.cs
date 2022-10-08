@@ -2,12 +2,13 @@ namespace Melanzana.MachO
 {
     public class MachCodeSignature : MachLinkEdit
     {
-        public MachCodeSignature()
+        public MachCodeSignature(MachObjectFile objectFile)
+            : base(objectFile)
         {
         }
 
-        public MachCodeSignature(MachLinkEditData data)
-            : base(data)
+        public MachCodeSignature(MachObjectFile objectFile, MachLinkEditData data)
+            : base(objectFile, data)
         {
         }
     }

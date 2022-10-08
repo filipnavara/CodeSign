@@ -2,12 +2,13 @@ namespace Melanzana.MachO
 {
     public class MachDylibCodeSigningDirs : MachLinkEdit
     {
-        public MachDylibCodeSigningDirs()
+        public MachDylibCodeSigningDirs(MachObjectFile objectFile)
+            : base(objectFile)
         {
         }
 
-        public MachDylibCodeSigningDirs(MachLinkEditData data)
-            : base(data)
+        public MachDylibCodeSigningDirs(MachObjectFile objectFile, MachLinkEditData data)
+            : base(objectFile, data)
         {
         }
     }

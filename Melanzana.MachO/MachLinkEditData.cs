@@ -14,7 +14,7 @@ namespace Melanzana.MachO
     {
         private Stream dataStream;
 
-        public MachLinkEditData()
+        internal MachLinkEditData()
         {
             this.dataStream = Stream.Null;
             this.FileOffset = 0;

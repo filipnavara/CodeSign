@@ -2,12 +2,13 @@ namespace Melanzana.MachO
 {
     public class MachDyldExportsTrie : MachLinkEdit
     {
-        public MachDyldExportsTrie()
+        public MachDyldExportsTrie(MachObjectFile objectFile)
+            : base(objectFile)
         {
         }
 
-        public MachDyldExportsTrie(MachLinkEditData data)
-            : base(data)
+        public MachDyldExportsTrie(MachObjectFile objectFile, MachLinkEditData data)
+            : base(objectFile, data)
         {
         }
     }

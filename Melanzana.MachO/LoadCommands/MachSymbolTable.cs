@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace Melanzana.MachO
 {
     public class MachSymbolTable : MachLoadCommand
@@ -5,6 +7,7 @@ namespace Melanzana.MachO
         private readonly MachObjectFile objectFile;
         private readonly MachLinkEditData symbolTableData;
         private readonly MachLinkEditData stringTableData;
+        private readonly Dictionary<byte, MachSection> sectionMap;
         private MachSymbolTableCollection? symbolTableCollection;
 
         public MachSymbolTable(MachObjectFile objectFile)
@@ -14,6 +17,7 @@ namespace Melanzana.MachO
             this.objectFile = objectFile;
             this.symbolTableData = new MachLinkEditData();
             this.stringTableData = new MachLinkEditData();
+            this.sectionMap = new Dictionary<byte, MachSection>();
         }
 
         internal MachSymbolTable(
@@ -28,6 +32,15 @@ namespace Melanzana.MachO
             this.objectFile = objectFile;
             this.symbolTableData = symbolTableData;
             this.stringTableData = stringTableData;
+
+            // Create a section map now since the section indexes may change later
+            sectionMap = new Dictionary<byte, MachSection>();
+            byte sectionIndex = 1;
+            foreach (var section in objectFile.Segments.SelectMany(segment => segment.Sections))
+            {
+                sectionMap.Add(sectionIndex++, section);
+                Debug.Assert(sectionIndex != 0);
+            }
         }
 
         public MachLinkEditData SymbolTableData
@@ -52,14 +65,16 @@ namespace Melanzana.MachO
         {
             get
             {
-                symbolTableCollection ??= new MachSymbolTableCollection(objectFile, symbolTableData, stringTableData);
+                symbolTableCollection ??= new MachSymbolTableCollection(objectFile, symbolTableData, stringTableData, sectionMap);
                 return symbolTableCollection;
             }
         }
 
         public MachDynamicLinkEditSymbolTable CreateDynamicLinkEditSymbolTable()
         {
-            symbolTableCollection ??= new MachSymbolTableCollection(objectFile, symbolTableData, stringTableData);
+            // Make sure the symbol table is read
+            _ = Symbols;
+            Debug.Assert(symbolTableCollection != null);
             return symbolTableCollection.CreateDynamicLinkEditSymbolTable();
         }
 

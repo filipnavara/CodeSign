@@ -22,7 +22,8 @@ namespace Melanzana.MachO
         public MachSymbolTableCollection(
             MachObjectFile objectFile,
             MachLinkEditData symbolTableData,
-            MachLinkEditData stringTableData)
+            MachLinkEditData stringTableData,
+            Dictionary<byte, MachSection> sectionMap)
         {
             this.objectFile = objectFile;
             this.symbolTableData = symbolTableData;
@@ -31,14 +32,6 @@ namespace Melanzana.MachO
             // Read existing symbols
             if (symbolTableData.Size > 0)
             {
-                var sectionMap = new Dictionary<byte, MachSection>();
-                byte sectionIndex = 1;
-                foreach (var section in objectFile.Segments.SelectMany(segment => segment.Sections))
-                {
-                    sectionMap.Add(sectionIndex++, section);
-                    Debug.Assert(sectionIndex != 0);
-                }
-
                 byte[] stringTable = new byte[stringTableData.Size];
                 using var stringTableStream = stringTableData.GetReadStream();
                 stringTableStream.ReadFully(stringTable);

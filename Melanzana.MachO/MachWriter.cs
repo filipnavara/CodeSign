@@ -391,7 +391,6 @@ namespace Melanzana.MachO
             // and fill in the gaps as we go.
             ulong currentOffset = (ulong)(stream.Position - initialOffset);
             var orderedSegments = objectFile.Segments.OrderBy(s => s.FileOffset).ToList();
-            bool writeLinkEditDatas = true;
 
             foreach (var segment in orderedSegments)
             {
@@ -408,17 +407,11 @@ namespace Melanzana.MachO
                             currentOffset += paddingSize;
                         }
 
-                        if (segment.Name == "__LINKEDIT")
+                        if (segment.IsLinkEditSegment)
                         {
-                            // __LINKEDIT always has to be the last segment in object file
-
-                            // If any linker data were updated then bail out of the loop at this point and
-                            // use the new data.
-                            writeLinkEditDatas = objectFile.LinkEditData.Any(data => data.HasContentChanged);
-                            if (writeLinkEditDatas)
-                            {
-                                break;
-                            }
+                            // __LINKEDIT always has to be the last segment in object file, so break
+                            // out of the loop.
+                            break;
                         }
 
                         using var segmentStream = segment.GetReadStream();
@@ -472,29 +465,26 @@ namespace Melanzana.MachO
                 }
             }
 
-            // We are either writing an unlinked object file or a modified __LINKEDIT segment
-            if (writeLinkEditDatas)
+            // We are either writing an unlinked object file or a __LINKEDIT segment
+            var linkEditData = new List<MachLinkEditData>(objectFile.LinkEditData);
+
+            // Sort by file offset first
+            linkEditData.Sort((sectionA, sectionB) =>
+                sectionA.FileOffset < sectionB.FileOffset ? -1 :
+                (sectionA.FileOffset > sectionB.FileOffset ? 1 : 0));
+
+            foreach (var data in linkEditData)
             {
-                var linkEditData = new List<MachLinkEditData>(objectFile.LinkEditData);
-
-                // Sort by file offset first
-                linkEditData.Sort((sectionA, sectionB) =>
-                    sectionA.FileOffset < sectionB.FileOffset ? -1 :
-                    (sectionA.FileOffset > sectionB.FileOffset ? 1 : 0));
-
-                foreach (var data in linkEditData)
+                if (data.FileOffset > currentOffset)
                 {
-                    if (data.FileOffset > currentOffset)
-                    {
-                        ulong paddingSize = data.FileOffset - currentOffset;
-                        stream.WritePadding((long)paddingSize);
-                        currentOffset += paddingSize;
-                    }
-
-                    using var segmentStream = data.GetReadStream();
-                    segmentStream.CopyTo(stream);
-                    currentOffset += (ulong)segmentStream.Length;
+                    ulong paddingSize = data.FileOffset - currentOffset;
+                    stream.WritePadding((long)paddingSize);
+                    currentOffset += paddingSize;
                 }
+
+                using var segmentStream = data.GetReadStream();
+                segmentStream.CopyTo(stream);
+                currentOffset += (ulong)segmentStream.Length;
             }
         }
 

@@ -173,7 +173,6 @@ namespace Melanzana.MachO
 
             return stream.Slice(0, stream.Length);
         }
-
         public void UpdateLayout()
         {
             // TODO: Change the layout only if necessary!
@@ -258,7 +257,6 @@ namespace Melanzana.MachO
             }
 
             ulong virtualAddress = 0;
-            MachSegment? linkEditSegment = null;
             foreach (var segment in Segments)
             {
                 ulong segmentSize = 0;
@@ -266,32 +264,30 @@ namespace Melanzana.MachO
                 segment.VirtualAddress = virtualAddress;
                 segment.FileOffset = (ulong)position;
 
-                foreach (var section in segment.Sections)
+                if (!segment.IsLinkEditSegment)
                 {
-                    long alignment = 1 << (int)section.Log2Alignment;
-                    var alignedSize = ((long)section.Size + alignment - 1) & ~(alignment - 1);
-
-                    position = (position + alignment - 1) & ~(alignment - 1);
-                    virtualAddress = (ulong)(((long)virtualAddress + alignment - 1) & ~(alignment - 1));
-
-                    if (section.Type is not MachSectionType.ZeroFill or MachSectionType.GBZeroFill or MachSectionType.ThreadLocalZeroFill)
+                    foreach (var section in segment.Sections)
                     {
-                        section.FileOffset = (uint)position;
-                        position += alignedSize;
+                        long alignment = 1 << (int)section.Log2Alignment;
+                        var alignedSize = ((long)section.Size + alignment - 1) & ~(alignment - 1);
+
+                        position = (position + alignment - 1) & ~(alignment - 1);
+                        virtualAddress = (ulong)(((long)virtualAddress + alignment - 1) & ~(alignment - 1));
+
+                        if (section.Type is not MachSectionType.ZeroFill or MachSectionType.GBZeroFill or MachSectionType.ThreadLocalZeroFill)
+                        {
+                            section.FileOffset = (uint)position;
+                            position += alignedSize;
+                        }
+
+                        // TODO: Calculate virtual addresses for non-object files
+                        section.VirtualAddress = virtualAddress;
+                        virtualAddress += (ulong)alignedSize;
+
+                        segmentSize = Math.Max(segmentSize, virtualAddress - segment.VirtualAddress);
                     }
 
-                    // TODO: Calculate virtual addresses for non-object files
-                    section.VirtualAddress = virtualAddress;
-                    virtualAddress += (ulong)alignedSize;
-
-                    segmentSize = Math.Max(segmentSize, virtualAddress - segment.VirtualAddress);
-                }
-
-                segment.Size = segmentSize;
-
-                if (segment.Name == "__LINKEDIT")
-                {
-                    linkEditSegment = segment;
+                    segment.Size = segmentSize;
                 }
             }
 
@@ -306,11 +302,6 @@ namespace Melanzana.MachO
             {
                 data.FileOffset = (uint)position;
                 position += (long)data.Size;
-            }
-
-            if (linkEditSegment != null)
-            {
-                linkEditSegment.Size = (ulong)position - linkEditSegment.FileOffset;
             }
 
             static int AlignedSize(int size, bool is64bit) => is64bit ? (size + 7) & ~7 : (size + 3) & ~3;

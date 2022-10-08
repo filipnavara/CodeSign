@@ -182,15 +182,8 @@ namespace Melanzana.CodeSign
 
                 /// TODO: Hic sunt leones (all code below)
 
+                // Rewrite LC_CODESIGNATURE data
                 var codeSignatureCommand = objectFile.LoadCommands.OfType<MachCodeSignature>().First();
-                // Rewrite __LINKEDIT section
-                var linkEditSegment = objectFile.LoadCommands.OfType<MachSegment>().First(s => s.Name == "__LINKEDIT");
-
-                using var oldLinkEditContent = linkEditSegment.GetReadStream();
-                using var newLinkEditContent = linkEditSegment.GetWriteStream();
-
-                long bytesToCopy = oldLinkEditContent.Length - codeSignatureCommand.FileSize;
-                oldLinkEditContent.Slice(0, bytesToCopy).CopyTo(newLinkEditContent);
 
                 // FIXME: Adjust the size to match LinkEdit section?
                 long size = blobs.Sum(b => b.Data != null ? b.Data.Length + 8 : 0);
@@ -201,19 +194,21 @@ namespace Melanzana.CodeSign
                 BinaryPrimitives.WriteUInt32BigEndian(embeddedSignatureBuffer.AsSpan(8, 4), (uint)blobs.Count);
                 int bufferOffset = 12;
                 int dataOffset = embeddedSignatureBuffer.Length;
-                foreach (var blob in blobs)
+                foreach (var (slot, data) in blobs)
                 {
-                    BinaryPrimitives.WriteUInt32BigEndian(embeddedSignatureBuffer.AsSpan(bufferOffset, 4), (uint)blob.Slot);
+                    BinaryPrimitives.WriteUInt32BigEndian(embeddedSignatureBuffer.AsSpan(bufferOffset, 4), (uint)slot);
                     BinaryPrimitives.WriteUInt32BigEndian(embeddedSignatureBuffer.AsSpan(bufferOffset + 4, 4), (uint)dataOffset);
-                    dataOffset += blob.Data.Length;
+                    dataOffset += data.Length;
                     bufferOffset += 8;
                 }
-                newLinkEditContent.Write(embeddedSignatureBuffer);
-                foreach (var blob in blobs)
+                uint codeSignatureSize = codeSignatureCommand.FileSize;
+                using var codeSignatureStream = codeSignatureCommand.Data.GetWriteStream();
+                codeSignatureStream.Write(embeddedSignatureBuffer);
+                foreach (var (slot, data) in blobs)
                 {
-                    newLinkEditContent.Write(blob.Data);
+                    codeSignatureStream.Write(data);
                 }
-                newLinkEditContent.WritePadding(oldLinkEditContent.Length - newLinkEditContent.Position);
+                codeSignatureStream.WritePadding(codeSignatureSize - codeSignatureStream.Position);
             }
 
             using var outputFile = File.OpenWrite(executablePath);

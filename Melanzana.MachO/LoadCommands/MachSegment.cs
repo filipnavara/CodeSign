@@ -21,8 +21,9 @@ namespace Melanzana.MachO
     /// </remarks>
     public class MachSegment : MachLoadCommand
     {
-        private MachObjectFile objectFile;
+        private readonly MachObjectFile objectFile;
         private Stream? dataStream;
+        private ulong size;
 
         public MachSegment(MachObjectFile objectFile, string name)
             : this(objectFile, name, null)
@@ -80,6 +81,11 @@ namespace Melanzana.MachO
                     }
                 }
 
+                if (IsLinkEditSegment)
+                {
+                    return objectFile.LinkEditData.Select(d => d.FileOffset + d.Size).Max() - FileOffset;
+                }
+
                 return (ulong)(dataStream?.Length ?? 0);
             }
         }
@@ -97,7 +103,25 @@ namespace Melanzana.MachO
         /// <summary>
         /// Gets or sets the size in bytes occupied in memory by this segment.
         /// </summary>
-        public ulong Size { get; set; }
+        public ulong Size
+        {
+            get
+            {
+                if (IsLinkEditSegment)
+                {
+                    const uint pageAlignment = 0x4000 - 1;
+                    return (FileSize + pageAlignment) & ~pageAlignment;
+                }
+
+                return size;
+            }
+            set
+            {
+                // NOTE: We silently ignore setting Size for __LINKEDIT to make it easier
+                // for the reader.
+                size = value;
+            }
+        }
 
         /// <summary>
         /// Gets or sets the maximum permitted protection of this segment.
@@ -116,11 +140,20 @@ namespace Melanzana.MachO
         /// <summary>
         public IList<MachSection> Sections { get; } = new List<MachSection>();
 
+        public bool IsLinkEditSegment => Name == "__LINKEDIT"; 
+
         public Stream GetReadStream()
         {
             if (Sections.Count != 0)
             {
                 throw new NotSupportedException("Segment can only be read directly if there are no sections");
+            }
+
+            if (IsLinkEditSegment)
+            {
+                // NOTE: We can support reading the link edit segment by constructing the stream
+                // from objectFile.LinkEditData on-demand.
+                throw new NotSupportedException("Reading __LINKEDIT segment is unsupported");
             }
 
             if (FileSize == 0 || dataStream == null)
@@ -144,6 +177,11 @@ namespace Melanzana.MachO
             if (Sections.Count != 0)
             {
                 throw new NotSupportedException("Segment can only be written to directly if there are no sections");
+            }
+
+            if (IsLinkEditSegment)
+            {
+                throw new NotSupportedException("Writing __LINKEDIT segment is unsupported");
             }
 
             dataStream = new UnclosableMemoryStream();

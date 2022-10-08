@@ -7,7 +7,7 @@ namespace Melanzana.MachO
 {
     public class MachSection
     {
-        private MachObjectFile objectFile;
+        private readonly MachObjectFile objectFile;
         private Stream? dataStream;
         private ulong size;
 

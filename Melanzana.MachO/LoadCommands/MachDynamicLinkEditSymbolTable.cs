@@ -1,8 +1,4 @@
-using System.Buffers.Binary;
-using System.Diagnostics;
-using System.Text;
 using Melanzana.MachO.BinaryFormat;
-using Melanzana.Streams;
 
 namespace Melanzana.MachO
 {
@@ -16,8 +12,56 @@ namespace Melanzana.MachO
         }
 
         public MachDynamicLinkEditSymbolTable(MachSymbolTable symbolTable)
+            : this()
         {
-            this.Header = ((MachSymbolTableCollection)symbolTable.Symbols).CreateDynamicLinkEditSymbolTable();
+            Span<bool> bucketUsed = stackalloc bool[3];
+            var symbols = symbolTable.Symbols;
+            int lastBucket = -1;
+            bool needsSort = false;
+
+            for (int i = 0; i < symbols.Count; i++)
+            {
+                int bucket =
+                    symbols[i].IsExternal ? 1 :
+                    (symbols[i].IsUndefined ? 2 : 0);
+
+                if (bucket != lastBucket)
+                {
+                    switch (lastBucket)
+                    {
+                        case 0: LocalSymbolsCount = (uint)i - LocalSymbolsIndex; break;
+                        case 1: ExternalSymbolsCount = (uint)i - ExternalSymbolsIndex; break;
+                        case 2: UndefinedSymbolsCount = (uint)i - UndefinedSymbolsIndex; break;
+                    }
+
+                    if (bucketUsed[bucket])
+                    {
+                        // Different types of symbols have to be next to each other
+                        throw new InvalidOperationException("Symbol table is not in correct order");
+                    }
+                    bucketUsed[bucket] = true;
+
+                    switch (bucket)
+                    {
+                        case 0: LocalSymbolsIndex = (uint)i; needsSort = false; break;
+                        case 1: ExternalSymbolsIndex = (uint)i; needsSort = true; break;
+                        case 2: UndefinedSymbolsIndex = (uint)i; needsSort = true; break;
+                    }
+                    lastBucket = bucket;
+                }
+                else if (needsSort && string.CompareOrdinal(symbols[i - 1].Name, symbols[i].Name) < 0)
+                {
+                    // External and undefined symbols have to be lexicographically sorted
+                    throw new InvalidOperationException("Symbol table is not sorted");
+                }
+            }
+
+            switch (lastBucket)
+            {
+                case 0: LocalSymbolsCount = (uint)symbols.Count - LocalSymbolsIndex; break;
+                case 1: ExternalSymbolsCount = (uint)symbols.Count - ExternalSymbolsIndex; break;
+                case 2: UndefinedSymbolsCount = (uint)symbols.Count - UndefinedSymbolsIndex; break;
+            }
         }
 
         internal MachDynamicLinkEditSymbolTable(DynamicSymbolTableCommandHeader header)

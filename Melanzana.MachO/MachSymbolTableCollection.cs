@@ -7,15 +7,12 @@ using Melanzana.Streams;
 
 namespace Melanzana.MachO
 {
-    internal class MachSymbolTableCollection : ICollection<MachSymbol>
+    internal class MachSymbolTableCollection : IList<MachSymbol>
     {
         private readonly MachObjectFile objectFile;
         private readonly MachLinkEditData symbolTableData;
         private readonly MachLinkEditData stringTableData;
-
-        private readonly List<MachSymbol> localSymbols = new();
-        private readonly List<MachSymbol> externalSymbols = new();
-        private readonly List<MachSymbol> undefinedSymbols = new();
+        private readonly List<MachSymbol> innerList = new();
 
         bool isDirty;
 
@@ -36,7 +33,9 @@ namespace Melanzana.MachO
                 using var stringTableStream = stringTableData.GetReadStream();
                 stringTableStream.ReadFully(stringTable);
 
-                int symbolSize = SymbolHeader.BinarySize + (objectFile.Is64Bit ? 8 : 4);
+                uint symbolSize = SymbolHeader.BinarySize + (objectFile.Is64Bit ? 8u : 4u);
+                innerList.Capacity = (int)(symbolTableData.Size / symbolSize);
+
                 byte[] symbolBuffer = new byte[symbolSize];
                 using var symbolTableStream = symbolTableData.GetReadStream();
                 while (symbolTableStream.Position < symbolTableStream.Length)
@@ -74,90 +73,55 @@ namespace Melanzana.MachO
                         Value = symbolValue,
                     };
 
-                    if (symbol.IsExternal)
-                    {
-                        externalSymbols.Add(symbol);
-                    }
-                    else if (symbol.IsUndefined)
-                    {
-                        undefinedSymbols.Add(symbol);
-                    }
-                    else
-                    {
-                        localSymbols.Add(symbol);
-                    }
+                    innerList.Add(symbol);
                 }
             }
         }
 
-        public int Count => localSymbols.Count + externalSymbols.Count + undefinedSymbols.Count;
+        public int Count => innerList.Count;
 
         public bool IsReadOnly => false;
 
+        public MachSymbol this[int index]
+        {
+            get => innerList[index];
+            set
+            {
+                innerList[index] = value;
+                isDirty = true;
+            }
+        }
+
         public void Add(MachSymbol symbol)
         {
-            if (symbol.IsExternal)
-            {
-                externalSymbols.Add(symbol);
-            }
-            else if (symbol.IsUndefined)
-            {
-                undefinedSymbols.Add(symbol);
-            }
-            else
-            {
-                localSymbols.Add(symbol);
-            }
-
+            innerList.Add(symbol);
             isDirty = true;
         }
 
         public void Clear()
         {
-            externalSymbols.Clear();
-            undefinedSymbols.Clear();
-            localSymbols.Clear();
+            innerList.Clear();
             isDirty = true;
         }
 
         public bool Contains(MachSymbol symbol)
         {
-            return
-                localSymbols.Contains(symbol) ||
-                externalSymbols.Contains(symbol) ||
-                undefinedSymbols.Contains(symbol);
+            return innerList.Contains(symbol);
         }
 
         public void CopyTo(MachSymbol[] array, int arrayIndex)
         {
-            ArgumentNullException.ThrowIfNull(array);
-
-            if (arrayIndex < 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(arrayIndex));
-            }
-
-            int count = Count;
-            if (array.Length - arrayIndex < count)
-            {
-                throw new ArgumentException("Array is too small", nameof(array));
-            }
-
-            localSymbols.CopyTo(array, arrayIndex);
-            externalSymbols.CopyTo(array, arrayIndex + localSymbols.Count);
-            undefinedSymbols.CopyTo(array, arrayIndex + localSymbols.Count + externalSymbols.Count);
+            innerList.CopyTo(array, arrayIndex);
         }
 
         public IEnumerator<MachSymbol> GetEnumerator()
         {
-            return localSymbols.Concat(externalSymbols).Concat(undefinedSymbols).GetEnumerator();
+            return innerList.GetEnumerator();
         }
 
         public bool Remove(MachSymbol item)
         {
-            if (localSymbols.Remove(item) ||
-                externalSymbols.Remove(item) ||
-                undefinedSymbols.Remove(item))
+            if (innerList.Remove(item))
             {
                 isDirty = true;
                 return true;
@@ -171,27 +135,10 @@ namespace Melanzana.MachO
             return GetEnumerator();
         }
 
-        public DynamicSymbolTableCommandHeader CreateDynamicLinkEditSymbolTable()
-        {
-            // NOTE: Match the order of WriteSymbols in FlushIfDirty
-            return new DynamicSymbolTableCommandHeader
-            {
-                LocalSymbolsIndex = 0,
-                LocalSymbolsCount = (uint)localSymbols.Count,
-                ExternalSymbolsIndex = (uint)localSymbols.Count,
-                ExternalSymbolsCount = (uint)externalSymbols.Count,
-                UndefinedSymbolsIndex = (uint)(localSymbols.Count + externalSymbols.Count),
-                UndefinedSymbolsCount = (uint)undefinedSymbols.Count,
-            };
-        }
-
         public void FlushIfDirty()
         {
             if (isDirty)
             {
-                externalSymbols.Sort((symA, symB) => string.CompareOrdinal(symA.Name, symB.Name));
-                undefinedSymbols.Sort((symA, symB) => string.CompareOrdinal(symA.Name, symB.Name));
-
                 var sectionMap = new Dictionary<MachSection, byte>();
                 byte sectionIndex = 1;
                 foreach (var section in objectFile.Segments.SelectMany(segment => segment.Sections))
@@ -206,54 +153,47 @@ namespace Melanzana.MachO
                 // Start the table with a NUL byte.
                 stringTableWriter.WriteByte(0);
 
-                WriteSymbols(localSymbols);
-                WriteSymbols(externalSymbols);
-                WriteSymbols(undefinedSymbols);
+                SymbolHeader symbolHeader = new SymbolHeader();
+                Span<byte> symbolHeaderBuffer = stackalloc byte[SymbolHeader.BinarySize];
+                Span<byte> symbolValueBuffer = new byte[objectFile.Is64Bit ? 8 : 4];
 
-                void WriteSymbols(IList<MachSymbol> symbols)
+                foreach (var symbol in innerList)
                 {
-                    SymbolHeader symbolHeader = new SymbolHeader();
-                    Span<byte> symbolHeaderBuffer = stackalloc byte[SymbolHeader.BinarySize];
-                    Span<byte> symbolValueBuffer = new byte[objectFile.Is64Bit ? 8 : 4];
+                    var nameBytes = Encoding.UTF8.GetBytes(symbol.Name);
+                    var nameOffset = stringTableWriter.Position;
 
-                    foreach (var symbol in symbols)
+                    stringTableWriter.Write(nameBytes);
+                    stringTableWriter.WriteByte(0);
+
+                    symbolHeader.NameIndex = (uint)nameOffset;
+                    symbolHeader.Section = symbol.Section == null ? (byte)0 : sectionMap[symbol.Section];
+                    symbolHeader.Descriptor = (ushort)symbol.Descriptor;
+                    symbolHeader.Type = (byte)symbol.Type;
+
+                    symbolHeader.Write(symbolHeaderBuffer, objectFile.IsLittleEndian, out _);
+                    symbolTableWriter.Write(symbolHeaderBuffer);
+
+                    if (objectFile.Is64Bit)
                     {
-                        var nameBytes = Encoding.UTF8.GetBytes(symbol.Name);
-                        var nameOffset = stringTableWriter.Position;
-
-                        stringTableWriter.Write(nameBytes);
-                        stringTableWriter.WriteByte(0);
-
-                        symbolHeader.NameIndex = (uint)nameOffset;
-                        symbolHeader.Section = symbol.Section == null ? (byte)0 : sectionMap[symbol.Section];
-                        symbolHeader.Descriptor = (ushort)symbol.Descriptor;
-                        symbolHeader.Type = (byte)symbol.Type;
-
-                        symbolHeader.Write(symbolHeaderBuffer, objectFile.IsLittleEndian, out _);
-                        symbolTableWriter.Write(symbolHeaderBuffer);
-
-                        if (objectFile.Is64Bit)
+                        if (objectFile.IsLittleEndian)
                         {
-                            if (objectFile.IsLittleEndian)
-                            {
-                                BinaryPrimitives.WriteUInt64LittleEndian(symbolValueBuffer, symbol.Value);
-                            }
-                            else
-                            {
-                                BinaryPrimitives.WriteUInt64BigEndian(symbolValueBuffer, symbol.Value);
-                            }
-                        }
-                        else if (objectFile.IsLittleEndian)
-                        {
-                            BinaryPrimitives.WriteUInt32LittleEndian(symbolValueBuffer, (uint)symbol.Value);
+                            BinaryPrimitives.WriteUInt64LittleEndian(symbolValueBuffer, symbol.Value);
                         }
                         else
                         {
-                            BinaryPrimitives.WriteUInt32BigEndian(symbolValueBuffer, (uint)symbol.Value);
+                            BinaryPrimitives.WriteUInt64BigEndian(symbolValueBuffer, symbol.Value);
                         }
-
-                        symbolTableWriter.Write(symbolValueBuffer);
                     }
+                    else if (objectFile.IsLittleEndian)
+                    {
+                        BinaryPrimitives.WriteUInt32LittleEndian(symbolValueBuffer, (uint)symbol.Value);
+                    }
+                    else
+                    {
+                        BinaryPrimitives.WriteUInt32BigEndian(symbolValueBuffer, (uint)symbol.Value);
+                    }
+
+                    symbolTableWriter.Write(symbolValueBuffer);
                 }
 
                 // Pad the string table
@@ -263,6 +203,20 @@ namespace Melanzana.MachO
 
                 isDirty = false;
             }
+        }
+
+        public int IndexOf(MachSymbol symbol) => innerList.IndexOf(symbol);
+
+        public void Insert(int index, MachSymbol symbol)
+        {
+            innerList.Insert(index, symbol);
+            isDirty = true;
+        }
+
+        public void RemoveAt(int index)
+        {
+            innerList.RemoveAt(index);
+            isDirty = true;
         }
     }
 }

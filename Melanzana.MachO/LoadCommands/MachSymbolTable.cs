@@ -61,7 +61,7 @@ namespace Melanzana.MachO
             }
         }
 
-        public ICollection<MachSymbol> Symbols
+        public IList<MachSymbol> Symbols
         {
             get
             {

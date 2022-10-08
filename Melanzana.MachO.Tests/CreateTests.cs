@@ -107,10 +107,9 @@ namespace Melanzana.MachO.Tests
             }
 
             using (var compactUnwindWriter = compactUnwindSection.GetWriteStream())
-            using (var compactUnwindRelocWriter = compactUnwindSection.GetRelocationWriter())
             {
                 // Address of _main
-                compactUnwindRelocWriter.AddRelocation(new MachRelocation
+                compactUnwindSection.Relocations.Add(new MachRelocation
                 {
                     Address = 0,
                     SymbolOrSectionIndex = 1, // TODO: Better symbolic reference?
@@ -136,14 +135,11 @@ namespace Melanzana.MachO.Tests
 
             var symbolTable = new MachSymbolTable(objectFile);
             objectFile.LoadCommands.Add(symbolTable);
-            using (var symbolTableWriter = symbolTable.GetWriter())
-            {
-                // FIXME: Values
-                symbolTableWriter.AddSymbol(new MachSymbol { Name = "ltmp0", Section = textSection, Value = 0, Descriptor = 0, Type = MachSymbolType.Section });
-                symbolTableWriter.AddSymbol(new MachSymbol { Name = "ltmp1", Section = compactUnwindSection, Value = 0x18, Descriptor = 0, Type = MachSymbolType.Section });
-                symbolTableWriter.AddSymbol(new MachSymbol { Name = "_main", Section = textSection, Value = 0, Descriptor = 0, Type = MachSymbolType.Section | MachSymbolType.External });
-                objectFile.LoadCommands.Add(symbolTableWriter.CreateDynamicLinkEditSymbolTable());
-            }
+            // FIXME: Values
+            symbolTable.Symbols.Add(new MachSymbol { Name = "ltmp0", Section = textSection, Value = 0, Descriptor = 0, Type = MachSymbolType.Section });
+            symbolTable.Symbols.Add(new MachSymbol { Name = "ltmp1", Section = compactUnwindSection, Value = 0x18, Descriptor = 0, Type = MachSymbolType.Section });
+            symbolTable.Symbols.Add(new MachSymbol { Name = "_main", Section = textSection, Value = 0, Descriptor = 0, Type = MachSymbolType.Section | MachSymbolType.External });
+            objectFile.LoadCommands.Add(symbolTable.CreateDynamicLinkEditSymbolTable());
 
             objectFile.UpdateLayout();
 

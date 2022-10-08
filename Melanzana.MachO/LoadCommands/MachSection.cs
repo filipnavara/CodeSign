@@ -1,6 +1,4 @@
-using System.Buffers.Binary;
 using System.ComponentModel;
-using System.Diagnostics;
 using Melanzana.Streams;
 
 namespace Melanzana.MachO
@@ -9,6 +7,8 @@ namespace Melanzana.MachO
     {
         private readonly MachObjectFile objectFile;
         private Stream? dataStream;
+        private MachLinkEditData? relocationData;
+        private MachRelocationCollection? relocationCollection;
         private ulong size;
 
         public MachSection(MachObjectFile objectFile, string segmentName, string sectionName)
@@ -17,7 +17,7 @@ namespace Melanzana.MachO
         }
 
         public MachSection(MachObjectFile objectFile, string segmentName, string sectionName, Stream? stream)
-            : this(objectFile, segmentName, sectionName, stream, new MachLinkEditData())
+            : this(objectFile, segmentName, sectionName, stream, null)
         {
         }
 
@@ -26,7 +26,7 @@ namespace Melanzana.MachO
             string segmentName,
             string sectionName,
             Stream? stream,
-            MachLinkEditData relocationData)
+            MachLinkEditData? relocationData)
         {
             ArgumentNullException.ThrowIfNull(objectFile);
             ArgumentNullException.ThrowIfNull(segmentName);
@@ -36,7 +36,7 @@ namespace Melanzana.MachO
             this.SegmentName = segmentName;
             this.SectionName = sectionName;
             this.dataStream = stream;
-            this.RelocationData = relocationData;
+            this.relocationData = relocationData;
         }
 
         /// <summary>
@@ -95,7 +95,7 @@ namespace Melanzana.MachO
         /// <summary>
         /// Gets or sets the number of relocation entries of this section.
         /// </summary>
-        public uint NumberOfReloationEntries => (uint)((RelocationData?.Size ?? 0u) / 8);
+        public uint NumberOfRelocationEntries => (uint)((RelocationData?.Size ?? 0u) / 8);
 
         internal uint Flags { get; set; }
 
@@ -124,7 +124,24 @@ namespace Melanzana.MachO
 
         internal bool HasContentChanged { get; set; }
 
-        public MachLinkEditData RelocationData { get; private init; }
+        public MachLinkEditData? RelocationData
+        {
+            get
+            {
+                relocationCollection?.FlushIfDirty();
+                return relocationData;
+            }
+        }
+
+        public IList<MachRelocation> Relocations
+        {
+            get
+            {
+                relocationData ??= new MachLinkEditData();
+                relocationCollection ??= new MachRelocationCollection(objectFile, relocationData);
+                return relocationCollection;
+            }
+        }
 
         public Stream GetReadStream()
         {
@@ -141,52 +158,6 @@ namespace Melanzana.MachO
             HasContentChanged = true;
             dataStream = new UnclosableMemoryStream();
             return dataStream;
-        }
-
-        public IEnumerable<MachRelocation> GetRelocationReader()
-        {
-            if (RelocationData == null)
-            {
-                yield break;
-            }
-
-            var relocationStream = RelocationData.GetReadStream();
-            var relocationBuffer = new byte[8];
-            
-            for (uint i = 0; i < NumberOfReloationEntries; i++)
-            {
-                relocationStream.ReadFully(relocationBuffer);
-
-                int address =
-                    objectFile.IsLittleEndian ?
-                    BinaryPrimitives.ReadInt32LittleEndian(relocationBuffer) :
-                    BinaryPrimitives.ReadInt32BigEndian(relocationBuffer);
-
-                uint info =
-                    objectFile.IsLittleEndian ?
-                    BinaryPrimitives.ReadUInt32LittleEndian(relocationBuffer.AsSpan(4)) :
-                    BinaryPrimitives.ReadUInt32BigEndian(relocationBuffer.AsSpan(4));
-
-                yield return new MachRelocation
-                {
-                    Address = address,
-                    SymbolOrSectionIndex = info & 0xff_ff_ff,
-                    IsPCRelative = (info & 0x1_00_00_00) > 0,
-                    Length = ((info >> 25) & 3) switch { 0 => 1, 1 => 2, 2 => 4, _ => 8 },
-                    IsExternal = (info & 0x8_00_00_00) > 0,
-                    RelocationType = (MachRelocationType)(info >> 28)
-                };
-            }
-        }
-
-        public MachRelocationWriter GetRelocationWriter()
-        {
-            if (RelocationData == null)
-            {
-                throw new InvalidOperationException("Section cannot have relocations");
-            }
-
-            return new MachRelocationWriter(objectFile, this, RelocationData);
         }
     }
 }

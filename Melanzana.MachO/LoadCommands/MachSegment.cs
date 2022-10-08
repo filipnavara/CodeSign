@@ -178,7 +178,10 @@ namespace Melanzana.MachO
             {
                 foreach (var section in Sections)
                 {
-                    yield return section.RelocationData;
+                    if (section.RelocationData is MachLinkEditData relocationData)
+                    {
+                        yield return relocationData;
+                    }
                 }
             }
         }

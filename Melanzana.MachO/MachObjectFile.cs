@@ -173,31 +173,45 @@ namespace Melanzana.MachO
 
             return stream.Slice(0, stream.Length);
         }
-        public void UpdateLayout()
-        {
-            // TODO: Change the layout only if necessary!
 
-            long position = 0;
+        /// <summary>
+        /// Update layout of segments, sections and link edit data to valid
+        /// non-overlapping values that can be written to disk.
+        /// </summary>
+        /// <param name="options">Option bag to specify additional requirements for the layout</param>
+        public void UpdateLayout(MachLayoutOptions? options = null)
+        {
+            // If no layout options were specified then infer the details
+            // from the object file.
+            if (options == null)
+            {
+                options = new MachLayoutOptions(this);
+            }
+
+            ulong segmentAlignment = options.SegmentAlignment;
+            ulong fileOffset = 0;
+
+            // First we need to place the load commands
 
             // 4 bytes magic number
-            position += 4;
+            fileOffset += 4u;
             // Mach header
-            position += Is64Bit ? MachHeader64.BinarySize : MachHeader.BinarySize;
+            fileOffset += (ulong)(Is64Bit ? MachHeader64.BinarySize : MachHeader.BinarySize);
             // Calculate size of load command
             foreach (var loadCommand in LoadCommands)
             {
-                position += LoadCommandHeader.BinarySize;
+                fileOffset += LoadCommandHeader.BinarySize;
 
                 switch (loadCommand)
                 {
                     case MachSegment segment:
                         if (Is64Bit)
                         {
-                            position += Segment64Header.BinarySize + segment.Sections.Count * Section64Header.BinarySize;
+                            fileOffset += (ulong)(Segment64Header.BinarySize + segment.Sections.Count * Section64Header.BinarySize);
                         }
                         else
                         {
-                            position += SegmentHeader.BinarySize + segment.Sections.Count * SectionHeader.BinarySize;
+                            fileOffset += (ulong)(SegmentHeader.BinarySize + segment.Sections.Count * SectionHeader.BinarySize);
                         }
                         break;
 
@@ -209,85 +223,87 @@ namespace Melanzana.MachO
                     case MachLinkerOptimizationHint:
                     case MachDyldExportsTrie:
                     case MachDyldChainedFixups:
-                        position += LinkEditHeader.BinarySize;
+                        fileOffset += LinkEditHeader.BinarySize;
                         break;
 
                     case MachLoadDylibCommand:
                     case MachLoadWeakDylibCommand:
                     case MachReexportDylibCommand:
-                        position += AlignedSize(
+                        fileOffset += (ulong)AlignedSize(
                             DylibCommandHeader.BinarySize +
                             Encoding.UTF8.GetByteCount(((MachDylibCommand)loadCommand).Name) + 1,
                             Is64Bit);
                         break;
 
                     case MachEntrypointCommand entrypointCommand:
-                        position += MainCommandHeader.BinarySize;
+                        fileOffset += MainCommandHeader.BinarySize;
                         break;
 
                     case MachVersionMinMacOS:
                     case MachVersionMinIOS:
                     case MachVersionMinTvOS:
                     case MachVersionMinWatchOS:
-                        position += VersionMinCommandHeader.BinarySize;
+                        fileOffset += VersionMinCommandHeader.BinarySize;
                         break;
 
                     case MachBuildVersion versionCommand:
-                        position += BuildVersionCommandHeader.BinarySize + (versionCommand.ToolVersions.Count * BuildToolVersionHeader.BinarySize);
+                        fileOffset += (ulong)(BuildVersionCommandHeader.BinarySize + (versionCommand.ToolVersions.Count * BuildToolVersionHeader.BinarySize));
                         break;
 
                     case MachSymbolTable:
-                        position += SymbolTableCommandHeader.BinarySize;
+                        fileOffset += SymbolTableCommandHeader.BinarySize;
                         break;
 
                     case MachDynamicLinkEditSymbolTable:
-                        position += DynamicSymbolTableCommandHeader.BinarySize;
+                        fileOffset += DynamicSymbolTableCommandHeader.BinarySize;
                         break;
 
                     case MachCustomLoadCommand customLoadCommand:
-                        position += customLoadCommand.Data.Length;
+                        fileOffset += (ulong)customLoadCommand.Data.Length;
                         break;
                 }
             }
 
-            if (FileType != MachFileType.Object)
-            {
-                const uint pageAligment = 0x4000 - 1;
-                position = (position + pageAligment) & ~pageAligment;
-            }
-
-            ulong virtualAddress = 0;
+            fileOffset = (fileOffset + segmentAlignment) & ~segmentAlignment;
+            ulong virtualAddress = options.BaseAddress;
             foreach (var segment in Segments)
             {
+                ulong segmentFileSize = 0;
                 ulong segmentSize = 0;
 
                 segment.VirtualAddress = virtualAddress;
-                segment.FileOffset = (ulong)position;
+                segment.FileOffset = fileOffset;
 
                 if (!segment.IsLinkEditSegment)
                 {
-                    foreach (var section in segment.Sections)
+                    if (segment.Sections.Count > 0)
                     {
-                        long alignment = 1 << (int)section.Log2Alignment;
-                        var alignedSize = ((long)section.Size + alignment - 1) & ~(alignment - 1);
-
-                        position = (position + alignment - 1) & ~(alignment - 1);
-                        virtualAddress = (ulong)(((long)virtualAddress + alignment - 1) & ~(alignment - 1));
-
-                        if (section.Type is not MachSectionType.ZeroFill or MachSectionType.GBZeroFill or MachSectionType.ThreadLocalZeroFill)
+                        foreach (var section in segment.Sections)
                         {
-                            section.FileOffset = (uint)position;
-                            position += alignedSize;
+                            ulong alignment = 1u << (int)section.Log2Alignment;
+                            ulong alignedSize = (section.Size + alignment - 1) & ~(alignment - 1);
+
+                            fileOffset = (fileOffset + alignment - 1) & ~(alignment - 1);
+                            virtualAddress = (virtualAddress + alignment - 1) & ~(alignment - 1);
+
+                            if (section.Type is not MachSectionType.ZeroFill or MachSectionType.GBZeroFill or MachSectionType.ThreadLocalZeroFill)
+                            {
+                                section.FileOffset = (uint)fileOffset;
+                                fileOffset += alignedSize;
+                                segmentFileSize += alignedSize;
+                            }
+
+                            section.VirtualAddress = virtualAddress;
+                            virtualAddress += (ulong)alignedSize;
+
+                            segmentSize = Math.Max(segmentSize, virtualAddress - segment.VirtualAddress);
                         }
 
-                        // TODO: Calculate virtual addresses for non-object files
-                        section.VirtualAddress = virtualAddress;
-                        virtualAddress += (ulong)alignedSize;
+                        segment.FileSize = (segmentFileSize + segmentAlignment - 1) & (segmentAlignment - 1);
+                        segment.Size = (segmentSize + segmentAlignment - 1) & (segmentAlignment - 1);
 
-                        segmentSize = Math.Max(segmentSize, virtualAddress - segment.VirtualAddress);
+                        virtualAddress = (virtualAddress + segmentAlignment - 1) & (segmentAlignment - 1);
                     }
-
-                    segment.Size = segmentSize;
                 }
             }
 
@@ -300,8 +316,8 @@ namespace Melanzana.MachO
 
             foreach (var data in linkEditData)
             {
-                data.FileOffset = (uint)position;
-                position += (long)data.Size;
+                data.FileOffset = (uint)fileOffset;
+                fileOffset += data.Size;
             }
 
             static int AlignedSize(int size, bool is64bit) => is64bit ? (size + 7) & ~7 : (size + 3) & ~3;

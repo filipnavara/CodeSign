@@ -17,7 +17,7 @@ namespace Melanzana.MachO
                 new MachSegment(objectFile, segmentHeader.Name, stream.Slice(segmentHeader.FileOffset, segmentHeader.FileSize)) :
                 new MachSegment(objectFile, segmentHeader.Name);
             machSegment.FileOffset = segmentHeader.FileOffset;
-            machSegment.OriginalFileSize = segmentHeader.FileSize;
+            machSegment.FileSize = segmentHeader.FileSize;
             machSegment.VirtualAddress = segmentHeader.Address;
             machSegment.Size = segmentHeader.Size;
             machSegment.MaximumProtection = segmentHeader.MaximumProtection;
@@ -75,7 +75,7 @@ namespace Melanzana.MachO
                 new MachSegment(objectFile, segmentHeader.Name, stream.Slice((long)segmentHeader.FileOffset, (long)segmentHeader.FileSize)) :
                 new MachSegment(objectFile, segmentHeader.Name);
             machSegment.FileOffset = segmentHeader.FileOffset;
-            machSegment.OriginalFileSize = segmentHeader.FileSize;
+            machSegment.FileSize = segmentHeader.FileSize;
             machSegment.VirtualAddress = segmentHeader.Address;
             machSegment.Size = segmentHeader.Size;
             machSegment.MaximumProtection = segmentHeader.MaximumProtection;

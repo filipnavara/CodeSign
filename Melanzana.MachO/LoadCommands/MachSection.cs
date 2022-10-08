@@ -70,8 +70,10 @@ namespace Melanzana.MachO
                 {
                     if (!HasContentChanged)
                     {
+                        var oldStream = dataStream;
                         HasContentChanged = true;
                         dataStream = new UnclosableMemoryStream();
+                        oldStream?.CopyTo(dataStream);
                     }
                     dataStream.SetLength((long)size);
                 }

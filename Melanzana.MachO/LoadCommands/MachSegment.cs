@@ -24,6 +24,7 @@ namespace Melanzana.MachO
         private readonly MachObjectFile objectFile;
         private Stream? dataStream;
         private ulong size;
+        private ulong fileSize;
 
         public MachSegment(MachObjectFile objectFile, string name)
             : this(objectFile, name, null)
@@ -46,8 +47,6 @@ namespace Melanzana.MachO
         /// </remarks>
         public ulong FileOffset { get; set; }
 
-        internal ulong OriginalFileSize { get; set; }
-
         /// <summary>
         /// Gets the size of the segment in the file.
         /// </summary>
@@ -61,32 +60,17 @@ namespace Melanzana.MachO
         {
             get
             {
-                if (Sections.Count > 0)
-                {
-                    if (Sections.Any(s => s.HasContentChanged))
-                    {
-                        if (objectFile.FileType == MachFileType.Object)
-                        {
-                            return Sections.Where(s => s.IsInFile).Select(s => s.FileOffset + s.Size).Max() - FileOffset;
-                        }
-                        else
-                        {
-                            const uint pageAlignment = 0x4000 - 1;
-                            return ((Sections.Where(s => s.IsInFile).Select(s => s.FileOffset + s.Size).Max() + pageAlignment) & ~pageAlignment) - FileOffset;
-                        }
-                    }
-                    else
-                    {
-                        return OriginalFileSize;
-                    }
-                }
-
                 if (IsLinkEditSegment)
                 {
                     return objectFile.LinkEditData.Select(d => d.FileOffset + d.Size).Max() - FileOffset;
                 }
 
-                return (ulong)(dataStream?.Length ?? 0);
+                return Sections.Count > 0 ? fileSize : (ulong)(dataStream?.Length ?? 0);
+            }
+            internal set
+            {
+                // Used by MachReader and MachObjectFile.UpdateLayout
+                fileSize = value;
             }
         }
 

@@ -290,7 +290,7 @@ namespace Melanzana.MachO
                             {
                                 section.FileOffset = (uint)fileOffset;
                                 fileOffset += alignedSize;
-                                segmentFileSize += alignedSize;
+                                segmentFileSize = Math.Max(segmentFileSize, fileOffset - segment.FileOffset);
                             }
 
                             section.VirtualAddress = virtualAddress;
@@ -299,10 +299,10 @@ namespace Melanzana.MachO
                             segmentSize = Math.Max(segmentSize, virtualAddress - segment.VirtualAddress);
                         }
 
-                        segment.FileSize = (segmentFileSize + segmentAlignment - 1) & (segmentAlignment - 1);
-                        segment.Size = (segmentSize + segmentAlignment - 1) & (segmentAlignment - 1);
+                        segment.FileSize = (segmentFileSize + segmentAlignment - 1) & ~(segmentAlignment - 1);
+                        segment.Size = (segmentSize + segmentAlignment - 1) & ~(segmentAlignment - 1);
 
-                        virtualAddress = (virtualAddress + segmentAlignment - 1) & (segmentAlignment - 1);
+                        virtualAddress = (virtualAddress + segmentAlignment - 1) & ~(segmentAlignment - 1);
                     }
                 }
             }

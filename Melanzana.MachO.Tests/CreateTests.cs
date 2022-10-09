@@ -142,6 +142,16 @@ namespace Melanzana.MachO.Tests
             objectFile.LoadCommands.Add(new MachDynamicLinkEditSymbolTable(symbolTable));
 
             objectFile.UpdateLayout();
+            Assert.Equal(0u, segment.VirtualAddress);
+            Assert.Equal(0x38u, segment.Size);
+            Assert.Equal(0x188u, segment.FileOffset);
+            Assert.Equal(0x38u, segment.FileSize);
+            Assert.Equal(0u, textSection.VirtualAddress);
+            Assert.Equal(0x14u, textSection.Size);
+            Assert.Equal(0x188u, textSection.FileOffset);
+            Assert.Equal(0x18u, compactUnwindSection.VirtualAddress);
+            Assert.Equal(0x20u, compactUnwindSection.Size);
+            Assert.Equal(0x1a0u, compactUnwindSection.FileOffset);
 
             // Ensure that write doesn't crash
             var binaryFile = new MemoryStream();

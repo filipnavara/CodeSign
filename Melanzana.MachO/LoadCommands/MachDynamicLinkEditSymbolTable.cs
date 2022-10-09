@@ -49,7 +49,7 @@ namespace Melanzana.MachO
                     }
                     lastBucket = bucket;
                 }
-                else if (needsSort && string.CompareOrdinal(symbols[i - 1].Name, symbols[i].Name) < 0)
+                else if (needsSort && string.CompareOrdinal(symbols[i - 1].Name, symbols[i].Name) > 0)
                 {
                     // External and undefined symbols have to be lexicographically sorted
                     throw new InvalidOperationException("Symbol table is not sorted");

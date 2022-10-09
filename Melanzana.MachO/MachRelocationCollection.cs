@@ -128,12 +128,12 @@ namespace Melanzana.MachO
                     if (objectFile.IsLittleEndian)
                     {
                         BinaryPrimitives.WriteInt32LittleEndian(relocationBuffer, relocation.Address);
-                        BinaryPrimitives.WriteUInt32LittleEndian(relocationBuffer, info);
+                        BinaryPrimitives.WriteUInt32LittleEndian(relocationBuffer.Slice(4), info);
                     }
                     else
                     {
                         BinaryPrimitives.WriteInt32BigEndian(relocationBuffer, relocation.Address);
-                        BinaryPrimitives.WriteUInt32BigEndian(relocationBuffer, info);
+                        BinaryPrimitives.WriteUInt32BigEndian(relocationBuffer.Slice(4), info);
                     }
 
                     stream.Write(relocationBuffer);

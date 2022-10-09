@@ -126,6 +126,16 @@ namespace Melanzana.MachO.Tests
                 compactUnwindWriter.Write(new byte[] { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }); // No LSDA
             }
 
+            // Verify the relocation was written correctly
+            Assert.NotNull(compactUnwindSection.RelocationData);
+            Assert.Equal(8u, compactUnwindSection.RelocationData!.Size);
+            using (var s = compactUnwindSection.RelocationData.GetReadStream())
+            {
+                byte[] r = new byte[8];
+                s.ReadFully(r);
+                Assert.Equal(new byte[] { 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x06 }, r);
+            }
+
             objectFile.LoadCommands.Add(new MachBuildVersion
             {
                 TargetPlatform = MachPlatform.MacOS,

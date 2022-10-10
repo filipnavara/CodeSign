@@ -22,8 +22,8 @@ namespace Melanzana.MachO
             for (int i = 0; i < symbols.Count; i++)
             {
                 int bucket =
-                    symbols[i].IsExternal ? 1 :
-                    (symbols[i].IsUndefined ? 2 : 0);
+                    symbols[i].IsUndefined ? 2 :
+                    (symbols[i].IsExternal ? 1 : 0);
 
                 if (bucket != lastBucket)
                 {

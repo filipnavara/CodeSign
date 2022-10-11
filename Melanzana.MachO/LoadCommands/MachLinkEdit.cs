@@ -1,17 +1,38 @@
-using System.Diagnostics;
-
 namespace Melanzana.MachO
 {
     public abstract class MachLinkEdit : MachLoadCommand
     {
-        public uint FileOffset { get; set; }
+        protected readonly MachObjectFile objectFile;
 
-        public uint FileSize { get; set; }
-
-        internal void Validate(MachSegment linkEditSegment)
+        protected MachLinkEdit(MachObjectFile objectFile)
         {
-            Debug.Assert(FileOffset >= linkEditSegment.FileOffset);
-            Debug.Assert(FileOffset + FileSize <= linkEditSegment.FileOffset + linkEditSegment.FileSize);
+            ArgumentNullException.ThrowIfNull(objectFile);
+
+            Data = new MachLinkEditData();
+            this.objectFile = objectFile;
+        }
+
+        protected MachLinkEdit(MachObjectFile objectFile, MachLinkEditData data)
+        {
+            ArgumentNullException.ThrowIfNull(objectFile);
+            ArgumentNullException.ThrowIfNull(data);
+
+            Data = data;
+            this.objectFile = objectFile;
+        }
+
+        public uint FileOffset => Data.FileOffset;
+
+        public uint FileSize => (uint)Data.Size;
+
+        public MachLinkEditData Data { get; private init; }
+
+        internal override IEnumerable<MachLinkEditData> LinkEditData
+        {
+            get
+            {
+                yield return Data;
+            }
         }
     }
 }

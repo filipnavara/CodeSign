@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text;
 using Melanzana.MachO.BinaryFormat;
@@ -8,16 +9,15 @@ namespace Melanzana.MachO
 {
     public static class MachReader
     {
-        private static MachSegment ReadSegment(ReadOnlySpan<byte> loadCommandPtr, bool isLittleEndian, Stream stream)
+        private static MachSegment ReadSegment(ReadOnlySpan<byte> loadCommandPtr, MachObjectFile objectFile, Stream stream)
         {
-            var segmentHeader = SegmentHeader.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), isLittleEndian, out var _);
+            var segmentHeader = SegmentHeader.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), objectFile.IsLittleEndian, out var _);
 
             var machSegment = segmentHeader.NumberOfSections == 0 && segmentHeader.FileSize != 0 ? 
-                new MachSegment(stream.Slice(segmentHeader.FileOffset, segmentHeader.FileSize)) :
-                new MachSegment();
+                new MachSegment(objectFile, segmentHeader.Name, stream.Slice(segmentHeader.FileOffset, segmentHeader.FileSize)) :
+                new MachSegment(objectFile, segmentHeader.Name);
             machSegment.FileOffset = segmentHeader.FileOffset;
-            machSegment.OriginalFileSize = segmentHeader.FileSize;
-            machSegment.Name = segmentHeader.Name;
+            machSegment.FileSize = segmentHeader.FileSize;
             machSegment.VirtualAddress = segmentHeader.Address;
             machSegment.Size = segmentHeader.Size;
             machSegment.MaximumProtection = segmentHeader.MaximumProtection;
@@ -26,7 +26,7 @@ namespace Melanzana.MachO
 
             for (int s = 0; s < segmentHeader.NumberOfSections; s++)
             {
-                var sectionHeader = SectionHeader.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize + SegmentHeader.BinarySize + s * SectionHeader.BinarySize), isLittleEndian, out var _);
+                var sectionHeader = SectionHeader.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize + SegmentHeader.BinarySize + s * SectionHeader.BinarySize), objectFile.IsLittleEndian, out var _);
                 var sectionType = (MachSectionType)(sectionHeader.Flags & 0xff);
                 MachSection section;
 
@@ -35,20 +35,29 @@ namespace Melanzana.MachO
                     sectionType != MachSectionType.GBZeroFill &&
                     sectionType != MachSectionType.ThreadLocalZeroFill)
                 {
-                    section = new MachSection(stream.Slice(sectionHeader.FileOffset, sectionHeader.Size));
+                    section = new MachSection(
+                        objectFile,
+                        sectionHeader.SegmentName,
+                        sectionHeader.SectionName,
+                        stream.Slice(sectionHeader.FileOffset, sectionHeader.Size),
+                        new MachLinkEditData(stream, sectionHeader.RelocationOffset, sectionHeader.NumberOfReloationEntries * 8));
                 }
                 else
                 {
-                    section = new MachSection { Size = sectionHeader.Size };
+                    section = new MachSection(
+                        objectFile,
+                        sectionHeader.SegmentName,
+                        sectionHeader.SectionName,
+                        null,
+                        new MachLinkEditData(stream, sectionHeader.RelocationOffset, sectionHeader.NumberOfReloationEntries * 8))
+                    {
+                        Size = sectionHeader.Size
+                    };
                 }
 
-                section.SectionName = sectionHeader.SectionName;
-                section.SegmentName = sectionHeader.SegmentName;
                 section.VirtualAddress = sectionHeader.Address;
                 section.FileOffset = sectionHeader.FileOffset;
                 section.Log2Alignment = sectionHeader.Log2Alignment;
-                section.RelocationOffset = sectionHeader.RelocationOffset;
-                section.NumberOfReloationEntries = sectionHeader.NumberOfReloationEntries;
                 section.Flags = sectionHeader.Flags;
                 section.Reserved1 = sectionHeader.Reserved1;
                 section.Reserved2 = sectionHeader.Reserved2;
@@ -58,16 +67,15 @@ namespace Melanzana.MachO
             return machSegment;
         }
 
-        private static MachSegment ReadSegment64(ReadOnlySpan<byte> loadCommandPtr, bool isLittleEndian, Stream stream)
+        private static MachSegment ReadSegment64(ReadOnlySpan<byte> loadCommandPtr, MachObjectFile objectFile, Stream stream)
         {
-            var segmentHeader = Segment64Header.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), isLittleEndian, out var _);
+            var segmentHeader = Segment64Header.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), objectFile.IsLittleEndian, out var _);
 
             var machSegment = segmentHeader.NumberOfSections == 0 && segmentHeader.FileSize != 0 ? 
-                new MachSegment(stream.Slice((long)segmentHeader.FileOffset, (long)segmentHeader.FileSize)) :
-                new MachSegment();
+                new MachSegment(objectFile, segmentHeader.Name, stream.Slice((long)segmentHeader.FileOffset, (long)segmentHeader.FileSize)) :
+                new MachSegment(objectFile, segmentHeader.Name);
             machSegment.FileOffset = segmentHeader.FileOffset;
-            machSegment.OriginalFileSize = segmentHeader.FileSize;
-            machSegment.Name = segmentHeader.Name;
+            machSegment.FileSize = segmentHeader.FileSize;
             machSegment.VirtualAddress = segmentHeader.Address;
             machSegment.Size = segmentHeader.Size;
             machSegment.MaximumProtection = segmentHeader.MaximumProtection;
@@ -76,7 +84,7 @@ namespace Melanzana.MachO
 
             for (int s = 0; s < segmentHeader.NumberOfSections; s++)
             {
-                var sectionHeader = Section64Header.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize + Segment64Header.BinarySize + s * Section64Header.BinarySize), isLittleEndian, out var _);
+                var sectionHeader = Section64Header.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize + Segment64Header.BinarySize + s * Section64Header.BinarySize), objectFile.IsLittleEndian, out var _);
                 var sectionType = (MachSectionType)(sectionHeader.Flags & 0xff);
                 MachSection section;
 
@@ -85,20 +93,29 @@ namespace Melanzana.MachO
                     sectionType != MachSectionType.GBZeroFill &&
                     sectionType != MachSectionType.ThreadLocalZeroFill)
                 {
-                    section = new MachSection(stream.Slice(sectionHeader.FileOffset, (long)sectionHeader.Size));
+                    section = new MachSection(
+                        objectFile,
+                        sectionHeader.SegmentName,
+                        sectionHeader.SectionName,
+                        stream.Slice(sectionHeader.FileOffset, (long)sectionHeader.Size),
+                        new MachLinkEditData(stream, sectionHeader.RelocationOffset, sectionHeader.NumberOfReloationEntries * 8));
                 }
                 else
                 {
-                    section = new MachSection { Size = sectionHeader.Size };
+                    section = new MachSection(
+                        objectFile,
+                        sectionHeader.SegmentName,
+                        sectionHeader.SectionName,
+                        null,
+                        new MachLinkEditData(stream, sectionHeader.RelocationOffset, sectionHeader.NumberOfReloationEntries * 8))
+                    {
+                        Size = sectionHeader.Size
+                    };
                 }
 
-                section.SectionName = sectionHeader.SectionName;
-                section.SegmentName = sectionHeader.SegmentName;
                 section.VirtualAddress = sectionHeader.Address;
                 section.FileOffset = sectionHeader.FileOffset;
                 section.Log2Alignment = sectionHeader.Log2Alignment;
-                section.RelocationOffset = sectionHeader.RelocationOffset;
-                section.NumberOfReloationEntries = sectionHeader.NumberOfReloationEntries;
                 section.Flags = sectionHeader.Flags;
                 section.Reserved1 = sectionHeader.Reserved1;
                 section.Reserved2 = sectionHeader.Reserved2;
@@ -109,15 +126,10 @@ namespace Melanzana.MachO
             return machSegment;
         }
 
-        private static T ReadLinkEdit<T>(ReadOnlySpan<byte> loadCommandPtr, bool isLittleEndian)
-            where T : MachLinkEdit, new()
+        private static MachLinkEditData ReadLinkEdit(ReadOnlySpan<byte> loadCommandPtr, MachObjectFile objectFile, Stream stream)
         {
-            var linkEditHeader = LinkEditHeader.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), isLittleEndian, out var _);
-            return new T
-            {
-                FileOffset = linkEditHeader.FileOffset,
-                FileSize = linkEditHeader.FileSize,
-            };
+            var linkEditHeader = LinkEditHeader.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), objectFile.IsLittleEndian, out var _);
+            return new MachLinkEditData(stream, linkEditHeader.FileOffset, linkEditHeader.FileSize);
         }
 
         private static T ReadDylibCommand<T>(ReadOnlySpan<byte> loadCommandPtr, uint commandSize, bool isLittleEndian)
@@ -191,17 +203,59 @@ namespace Melanzana.MachO
             return buildVersion;
         }
 
-        private static MachSymbolTable ReadSymbolTable(ReadOnlySpan<byte> loadCommandPtr, bool isLittleEndian)
+        private static MachSymbolTable ReadSymbolTable(ReadOnlySpan<byte> loadCommandPtr, MachObjectFile objectFile, Stream stream)
         {
-            var symbolTableHeader = SymbolTableCommandHeader.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), isLittleEndian, out var _);
+            var symbolTableHeader = SymbolTableCommandHeader.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), objectFile.IsLittleEndian, out var _);
 
-            return new MachSymbolTable
+            uint symbolTableSize =
+                symbolTableHeader.NumberOfSymbols *
+                (SymbolHeader.BinarySize + (objectFile.Is64Bit ? 8u : 4u));
+
+            return new MachSymbolTable(
+                objectFile,
+                new MachLinkEditData(stream, symbolTableHeader.SymbolTableOffset, symbolTableSize),
+                new MachLinkEditData(stream, symbolTableHeader.StringTableOffset, symbolTableHeader.StringTableSize));
+        }
+
+        private static MachDynamicLinkEditSymbolTable ReadDynamicLinkEditSymbolTable(ReadOnlySpan<byte> loadCommandPtr, bool isLittleEndian)
+        {
+            var dynamicSymbolTableHeader = DynamicSymbolTableCommandHeader.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), isLittleEndian, out var _);
+
+            // TODO: Clean up
+            return new MachDynamicLinkEditSymbolTable(dynamicSymbolTableHeader);
+        }
+
+        private static MachDyldInfo ReadDyldInfo(
+            MachLoadCommandType loadCommandType,
+            ReadOnlySpan<byte> loadCommandPtr,
+            MachObjectFile objectFile,
+            Stream stream)
+        {
+            var dyldInfoHeader = DyldInfoHeader.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), objectFile.IsLittleEndian, out var _);
+
+            var rebaseData = new MachLinkEditData(stream, dyldInfoHeader.RebaseOffset, dyldInfoHeader.RebaseSize);
+            var bindData = new MachLinkEditData(stream, dyldInfoHeader.BindOffset, dyldInfoHeader.BindSize);
+            var weakBindData = new MachLinkEditData(stream, dyldInfoHeader.WeakBindOffset, dyldInfoHeader.WeakBindSize);
+            var lazyBindData = new MachLinkEditData(stream, dyldInfoHeader.LazyBindOffset, dyldInfoHeader.LazyBindSize);
+            var exportData = new MachLinkEditData(stream, dyldInfoHeader.ExportOffset, dyldInfoHeader.ExportSize);
+
+            if (loadCommandType == MachLoadCommandType.DyldInfo)
             {
-                SymbolTableOffset = symbolTableHeader.SymbolTableOffset,
-                NumberOfSymbols = symbolTableHeader.NumberOfSymbols,
-                StringTableOffset = symbolTableHeader.StringTableOffset,
-                StringTableSize = symbolTableHeader.StringTableSize,
-            };
+                return new MachDyldInfo(objectFile, rebaseData, bindData, weakBindData, lazyBindData, exportData);
+            }
+
+            return new MachDyldInfoOnly(objectFile, rebaseData, bindData, weakBindData, lazyBindData, exportData);
+        }
+
+        private static MachTwoLevelHints ReadTwoLevelHints(ReadOnlySpan<byte> loadCommandPtr, MachObjectFile objectFile, Stream stream)
+        {
+            var twoLevelHintsHeader = TwoLevelHintsHeader.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), objectFile.IsLittleEndian, out var _);
+
+            return new MachTwoLevelHints(objectFile,
+                new MachLinkEditData(
+                    stream,
+                    twoLevelHintsHeader.FileOffset,
+                    twoLevelHintsHeader.NumberOfHints * sizeof(uint)));
         }
 
         private static MachObjectFile ReadSingle(FatArchHeader? fatArchHeader, MachMagic magic, Stream stream)
@@ -254,16 +308,16 @@ namespace Melanzana.MachO
                 var loadCommandHeader = LoadCommandHeader.Read(loadCommandPtr, isLittleEndian, out var _);
                 objectFile.LoadCommands.Add(loadCommandHeader.CommandType switch
                 {
-                    MachLoadCommandType.Segment => ReadSegment(loadCommandPtr, isLittleEndian, stream),
-                    MachLoadCommandType.Segment64 => ReadSegment64(loadCommandPtr, isLittleEndian, stream),
-                    MachLoadCommandType.CodeSignature => ReadLinkEdit<MachCodeSignature>(loadCommandPtr, isLittleEndian),
-                    MachLoadCommandType.DylibCodeSigningDRs => ReadLinkEdit<MachDylibCodeSigningDirs>(loadCommandPtr, isLittleEndian),
-                    MachLoadCommandType.SegmentSplitInfo => ReadLinkEdit<MachSegmentSplitInfo>(loadCommandPtr, isLittleEndian),
-                    MachLoadCommandType.FunctionStarts => ReadLinkEdit<MachFunctionStarts>(loadCommandPtr, isLittleEndian),
-                    MachLoadCommandType.DataInCode => ReadLinkEdit<MachDataInCode>(loadCommandPtr, isLittleEndian),
-                    MachLoadCommandType.LinkerOptimizationHint => ReadLinkEdit<MachLinkerOptimizationHint>(loadCommandPtr, isLittleEndian),
-                    MachLoadCommandType.DyldExportsTrie => ReadLinkEdit<MachDyldExportsTrie>(loadCommandPtr, isLittleEndian),
-                    MachLoadCommandType.DyldChainedFixups => ReadLinkEdit<MachDyldChainedFixups>(loadCommandPtr, isLittleEndian),
+                    MachLoadCommandType.Segment => ReadSegment(loadCommandPtr, objectFile, stream),
+                    MachLoadCommandType.Segment64 => ReadSegment64(loadCommandPtr, objectFile, stream),
+                    MachLoadCommandType.CodeSignature => new MachCodeSignature(objectFile, ReadLinkEdit(loadCommandPtr, objectFile, stream)),
+                    MachLoadCommandType.DylibCodeSigningDRs => new MachDylibCodeSigningDirs(objectFile, ReadLinkEdit(loadCommandPtr, objectFile, stream)),
+                    MachLoadCommandType.SegmentSplitInfo => new MachSegmentSplitInfo(objectFile, ReadLinkEdit(loadCommandPtr, objectFile, stream)),
+                    MachLoadCommandType.FunctionStarts => new MachFunctionStarts(objectFile, ReadLinkEdit(loadCommandPtr, objectFile, stream)),
+                    MachLoadCommandType.DataInCode => new MachDataInCode(objectFile, ReadLinkEdit(loadCommandPtr, objectFile, stream)),
+                    MachLoadCommandType.LinkerOptimizationHint => new MachLinkerOptimizationHint(objectFile, ReadLinkEdit(loadCommandPtr, objectFile, stream)),
+                    MachLoadCommandType.DyldExportsTrie => new MachDyldExportsTrie(objectFile, ReadLinkEdit(loadCommandPtr, objectFile, stream)),
+                    MachLoadCommandType.DyldChainedFixups => new MachDyldChainedFixups(objectFile, ReadLinkEdit(loadCommandPtr, objectFile, stream)),
                     MachLoadCommandType.LoadDylib => ReadDylibCommand<MachLoadDylibCommand>(loadCommandPtr, loadCommandHeader.CommandSize, isLittleEndian),
                     MachLoadCommandType.LoadWeakDylib => ReadDylibCommand<MachLoadWeakDylibCommand>(loadCommandPtr, loadCommandHeader.CommandSize, isLittleEndian),
                     MachLoadCommandType.ReexportDylib => ReadDylibCommand<MachReexportDylibCommand>(loadCommandPtr, loadCommandHeader.CommandSize, isLittleEndian),
@@ -273,7 +327,11 @@ namespace Melanzana.MachO
                     MachLoadCommandType.VersionMinTvOS => ReadVersionMinCommand<MachVersionMinTvOS>(loadCommandPtr, isLittleEndian),
                     MachLoadCommandType.VersionMinWatchOS => ReadVersionMinCommand<MachVersionMinWatchOS>(loadCommandPtr, isLittleEndian),
                     MachLoadCommandType.BuildVersion => ReadBuildVersion(loadCommandPtr, isLittleEndian),
-                    MachLoadCommandType.SymbolTable => ReadSymbolTable(loadCommandPtr, isLittleEndian),
+                    MachLoadCommandType.SymbolTable => ReadSymbolTable(loadCommandPtr, objectFile, stream),
+                    MachLoadCommandType.DynamicLinkEditSymbolTable => ReadDynamicLinkEditSymbolTable(loadCommandPtr, isLittleEndian),
+                    MachLoadCommandType.DyldInfo => ReadDyldInfo(loadCommandHeader.CommandType,  loadCommandPtr, objectFile, stream),
+                    MachLoadCommandType.DyldInfoOnly => ReadDyldInfo(loadCommandHeader.CommandType, loadCommandPtr, objectFile, stream),
+                    MachLoadCommandType.TowLevelHints => ReadTwoLevelHints(loadCommandPtr, objectFile, stream),
                     _ => new MachCustomLoadCommand(loadCommandHeader.CommandType, loadCommandPtr.Slice(LoadCommandHeader.BinarySize, (int)loadCommandHeader.CommandSize - LoadCommandHeader.BinarySize).ToArray()),
                 });
                 loadCommandPtr = loadCommandPtr.Slice((int)loadCommandHeader.CommandSize);

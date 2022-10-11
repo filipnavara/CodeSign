@@ -36,36 +36,15 @@ namespace Melanzana.CodeSign
         {
             var linkEditSegment = machO.LoadCommands.OfType<MachSegment>().First(s => s.Name == "__LINKEDIT");
             var codeSignatureCommand = machO.LoadCommands.OfType<MachCodeSignature>().FirstOrDefault();
-            uint oldSignatureSize;
 
-            if (codeSignatureCommand != null)
+            if (codeSignatureCommand == null)
             {
-                // If there was previously a code signature we go and resize the existing one. We also need
-                // to resize the __LINKEDIT segment to match. The segment is always the last one in the
-                // file.
-                oldSignatureSize = codeSignatureCommand.FileSize;
-                codeSignatureCommand.FileSize = codeSignatureSize;
-            }
-            else
-            {
-                // Create new code signature command
-                codeSignatureCommand = new MachCodeSignature
-                {
-                    FileOffset = (uint)machO.GetSigningLimit(),
-                    FileSize = codeSignatureSize,
-                };
+                codeSignatureCommand = new MachCodeSignature(machO);
+                codeSignatureCommand.Data.FileOffset = (uint)machO.GetSigningLimit();
                 machO.LoadCommands.Add(codeSignatureCommand);
-                oldSignatureSize = 0;
-
-                // Update __LINKEDIT segment to include the newly created command
             }
 
-            using var oldLinkEditContent = linkEditSegment.GetReadStream();
-            using var newLinkEditContent = linkEditSegment.GetWriteStream();
-
-            long bytesToCopy = oldLinkEditContent.Length - oldSignatureSize;
-            oldLinkEditContent.Slice(0, bytesToCopy).CopyTo(newLinkEditContent);
-            newLinkEditContent.WritePadding(codeSignatureSize);
+            codeSignatureCommand.Data.Size = codeSignatureSize;
         }
     }
 }

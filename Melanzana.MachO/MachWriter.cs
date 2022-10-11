@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Diagnostics;
+using System.IO;
 using System.Text;
 using Melanzana.MachO.BinaryFormat;
 using Melanzana.Streams;
@@ -59,7 +60,7 @@ namespace Melanzana.MachO
                         FileOffset = section.FileOffset,
                         Log2Alignment = section.Log2Alignment,
                         RelocationOffset = section.RelocationOffset,
-                        NumberOfReloationEntries = section.NumberOfReloationEntries,
+                        NumberOfReloationEntries = section.NumberOfRelocationEntries,
                         Flags = section.Flags,
                         Reserved1 = section.Reserved1,
                         Reserved2 = section.Reserved2,
@@ -108,7 +109,7 @@ namespace Melanzana.MachO
                         FileOffset = section.FileOffset,
                         Log2Alignment = section.Log2Alignment,
                         RelocationOffset = section.RelocationOffset,
-                        NumberOfReloationEntries = section.NumberOfReloationEntries,
+                        NumberOfReloationEntries = section.NumberOfRelocationEntries,
                         Flags = section.Flags,
                         Reserved1 = section.Reserved1,
                         Reserved2 = section.Reserved2,
@@ -238,7 +239,7 @@ namespace Melanzana.MachO
             }
         }
 
-        private static void WriteSymbolTableCommand(Stream stream, MachSymbolTable symbolTable, bool isLittleEndian)
+        private static void WriteSymbolTableCommand(Stream stream, MachSymbolTable symbolTable, bool isLittleEndian, bool is64Bit)
         {
             WriteLoadCommandHeader(
                 stream,
@@ -246,18 +247,77 @@ namespace Melanzana.MachO
                 LoadCommandHeader.BinarySize + SymbolTableCommandHeader.BinarySize,
                 isLittleEndian);
 
+            uint symbolSize = SymbolHeader.BinarySize + (is64Bit ? 8u : 4u);
+
             Span<byte> symbolTableHeaderBuffer = stackalloc byte[SymbolTableCommandHeader.BinarySize];
             var symbolTableHeader = new SymbolTableCommandHeader
             {
-                SymbolTableOffset = symbolTable.SymbolTableOffset,
-                NumberOfSymbols = symbolTable.NumberOfSymbols,
-                StringTableOffset = symbolTable.StringTableOffset,
-                StringTableSize = symbolTable.StringTableSize,
+                SymbolTableOffset = symbolTable.SymbolTableData.FileOffset,
+                NumberOfSymbols = (uint)(symbolTable.SymbolTableData.Size / symbolSize),
+                StringTableOffset = symbolTable.StringTableData.FileOffset,
+                StringTableSize = (uint)symbolTable.StringTableData.Size,
             };
             symbolTableHeader.Write(symbolTableHeaderBuffer, isLittleEndian, out var _);
             stream.Write(symbolTableHeaderBuffer);
         }
 
+        private static void WriteDynamicLinkEditSymbolTableCommand(Stream stream, MachDynamicLinkEditSymbolTable dySymbolTable, bool isLittleEndian)
+        {
+            WriteLoadCommandHeader(
+                stream,
+                MachLoadCommandType.DynamicLinkEditSymbolTable,
+                LoadCommandHeader.BinarySize + DynamicSymbolTableCommandHeader.BinarySize,
+                isLittleEndian);
+
+            Span<byte> symbolTableHeaderBuffer = stackalloc byte[DynamicSymbolTableCommandHeader.BinarySize];
+            var symbolTableHeader = dySymbolTable.Header;
+            symbolTableHeader.Write(symbolTableHeaderBuffer, isLittleEndian, out var _);
+            stream.Write(symbolTableHeaderBuffer);
+        }
+
+        private static void WriteDyldInfoCommand(Stream stream, MachLoadCommandType commandType, MachDyldInfo dyldInfo, bool isLittleEndian)
+        {
+            WriteLoadCommandHeader(
+                stream,
+                commandType,
+                LoadCommandHeader.BinarySize + DyldInfoHeader.BinarySize,
+                isLittleEndian);
+
+            Span<byte> dyldInfoHeaderBuffer = stackalloc byte[DyldInfoHeader.BinarySize];
+            var dyldInfoHeader = new DyldInfoHeader
+            {
+                RebaseOffset = dyldInfo.RebaseData.FileOffset,
+                RebaseSize = (uint)dyldInfo.RebaseData.Size,
+                BindOffset = dyldInfo.BindData.FileOffset,
+                BindSize = (uint)dyldInfo.BindData.Size,
+                WeakBindOffset = dyldInfo.WeakBindData.FileOffset,
+                WeakBindSize = (uint)dyldInfo.WeakBindData.Size,
+                LazyBindOffset = dyldInfo.LazyBindData.FileOffset,
+                LazyBindSize = (uint)dyldInfo.LazyBindData.Size,
+                ExportOffset = dyldInfo.ExportData.FileOffset,
+                ExportSize = (uint)dyldInfo.ExportData.Size,
+            };
+            dyldInfoHeader.Write(dyldInfoHeaderBuffer, isLittleEndian, out var _);
+            stream.Write(dyldInfoHeaderBuffer);
+        }
+
+        private static void WriteTwoLevelHintsCommand(Stream stream, MachTwoLevelHints twoLevelHints, bool isLittleEndian)
+        {
+            WriteLoadCommandHeader(
+                stream,
+                MachLoadCommandType.TowLevelHints,
+                LoadCommandHeader.BinarySize + DyldInfoHeader.BinarySize,
+                isLittleEndian);
+
+            Span<byte> twoLevelHintsHeaderBuffer = stackalloc byte[TwoLevelHintsHeader.BinarySize];
+            var twoLevelHintsHeader = new TwoLevelHintsHeader
+            {
+                FileOffset = twoLevelHints.Data.FileOffset,
+                NumberOfHints = (uint)(twoLevelHints.Data.Size / sizeof(uint))
+            };
+            twoLevelHintsHeader.Write(twoLevelHintsHeaderBuffer, isLittleEndian, out var _);
+            stream.Write(twoLevelHintsHeaderBuffer);
+        }
 
         public static void Write(Stream stream, MachObjectFile objectFile)
         {
@@ -294,10 +354,17 @@ namespace Melanzana.MachO
                     case MachVersionMinTvOS tvOSBuildVersion: WriteVersionMinCommand(loadCommandsStream, MachLoadCommandType.VersionMinTvOS, tvOSBuildVersion, isLittleEndian); break;
                     case MachVersionMinWatchOS watchOSBuildVersion: WriteVersionMinCommand(loadCommandsStream, MachLoadCommandType.VersionMinWatchOS, watchOSBuildVersion, isLittleEndian); break;
                     case MachBuildVersion buildVersion: WriteBuildVersion(loadCommandsStream, buildVersion, isLittleEndian); break;
-                    case MachSymbolTable symbolTable: WriteSymbolTableCommand(loadCommandsStream, symbolTable, isLittleEndian); break;
+                    case MachSymbolTable symbolTable: WriteSymbolTableCommand(loadCommandsStream, symbolTable, isLittleEndian, objectFile.Is64Bit); break;
+                    case MachDynamicLinkEditSymbolTable dySymbolTable: WriteDynamicLinkEditSymbolTableCommand(loadCommandsStream, dySymbolTable, isLittleEndian); break;
+                    case MachDyldInfoOnly dyldInfoOnly: WriteDyldInfoCommand(loadCommandsStream, MachLoadCommandType.DyldInfoOnly, dyldInfoOnly, isLittleEndian); break;
+                    case MachDyldInfo dyldInfo: WriteDyldInfoCommand(loadCommandsStream, MachLoadCommandType.DyldInfo, dyldInfo, isLittleEndian); break;
+                    case MachTwoLevelHints twoLevelHints: WriteTwoLevelHintsCommand(loadCommandsStream, twoLevelHints, isLittleEndian); break;
                     case MachCustomLoadCommand customLoadCommand:
                         WriteLoadCommandHeader(loadCommandsStream, customLoadCommand.Type, customLoadCommand.Data.Length + LoadCommandHeader.BinarySize, isLittleEndian);
                         loadCommandsStream.Write(customLoadCommand.Data);
+                        break;
+                    default:
+                        Debug.Fail("Unknown load command");
                         break;
                 }
             }
@@ -342,7 +409,7 @@ namespace Melanzana.MachO
             // Save the current position within the Mach-O file. Now we need to output the segments
             // and fill in the gaps as we go.
             ulong currentOffset = (ulong)(stream.Position - initialOffset);
-            var orderedSegments = objectFile.LoadCommands.OfType<MachSegment>().OrderBy(s => s.FileOffset).ToList();
+            var orderedSegments = objectFile.Segments.OrderBy(s => s.FileOffset).ToList();
 
             foreach (var segment in orderedSegments)
             {
@@ -357,6 +424,13 @@ namespace Melanzana.MachO
                             ulong paddingSize = segment.FileOffset - currentOffset;
                             stream.WritePadding((long)paddingSize);
                             currentOffset += paddingSize;
+                        }
+
+                        if (segment.IsLinkEditSegment)
+                        {
+                            // __LINKEDIT always has to be the last segment in object file, so break
+                            // out of the loop.
+                            break;
                         }
 
                         using var segmentStream = segment.GetReadStream();
@@ -408,6 +482,28 @@ namespace Melanzana.MachO
                         }
                     }
                 }
+            }
+
+            // We are either writing an unlinked object file or a __LINKEDIT segment
+            var linkEditData = new List<MachLinkEditData>(objectFile.LinkEditData);
+
+            // Sort by file offset first
+            linkEditData.Sort((sectionA, sectionB) =>
+                sectionA.FileOffset < sectionB.FileOffset ? -1 :
+                (sectionA.FileOffset > sectionB.FileOffset ? 1 : 0));
+
+            foreach (var data in linkEditData)
+            {
+                if (data.FileOffset > currentOffset)
+                {
+                    ulong paddingSize = data.FileOffset - currentOffset;
+                    stream.WritePadding((long)paddingSize);
+                    currentOffset += paddingSize;
+                }
+
+                using var segmentStream = data.GetReadStream();
+                segmentStream.CopyTo(stream);
+                currentOffset += (ulong)segmentStream.Length;
             }
         }
 

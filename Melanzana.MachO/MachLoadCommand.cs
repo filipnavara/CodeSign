@@ -5,5 +5,7 @@ namespace Melanzana.MachO
         protected MachLoadCommand()
         {
         }
+
+        internal virtual IEnumerable<MachLinkEditData> LinkEditData => Array.Empty<MachLinkEditData>();
     }
 }

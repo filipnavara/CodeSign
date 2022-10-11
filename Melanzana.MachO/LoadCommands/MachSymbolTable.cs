@@ -1,62 +1,81 @@
-using System.Buffers.Binary;
 using System.Diagnostics;
-using System.Text;
-using Melanzana.MachO.BinaryFormat;
-using Melanzana.Streams;
 
 namespace Melanzana.MachO
 {
     public class MachSymbolTable : MachLoadCommand
     {
-        public uint SymbolTableOffset { get; set; }
+        private readonly MachObjectFile objectFile;
+        private readonly MachLinkEditData symbolTableData;
+        private readonly MachLinkEditData stringTableData;
+        private readonly Dictionary<byte, MachSection> sectionMap;
+        private MachSymbolTableCollection? symbolTableCollection;
 
-        public uint NumberOfSymbols { get; set; }
-
-        public uint StringTableOffset { get; set; }
-
-        public uint StringTableSize { get; set; }
-
-        // TODO: Reader, Writer
-        public IEnumerable<MachSymbol> GetReader(MachObjectFile objectFile)
+        public MachSymbolTable(MachObjectFile objectFile)
         {
-            byte[] stringTable = new byte[StringTableSize];
-            var stringTableStream = objectFile.GetStreamAtFileOffset(StringTableOffset, StringTableSize);
-            stringTableStream.ReadFully(stringTable);
+            ArgumentNullException.ThrowIfNull(objectFile);
 
-            int symbolSize = SymbolHeader.BinarySize + (objectFile.Is64Bit ? 8 : 4);
-            byte[] symbolBuffer = new byte[symbolSize];
-            var symbolTableStream = objectFile.GetStreamAtFileOffset(SymbolTableOffset, (uint)(symbolSize * NumberOfSymbols));
-            for (int i = 0; i < NumberOfSymbols; i++)
+            this.objectFile = objectFile;
+            this.symbolTableData = new MachLinkEditData();
+            this.stringTableData = new MachLinkEditData();
+            this.sectionMap = new Dictionary<byte, MachSection>();
+        }
+
+        internal MachSymbolTable(
+            MachObjectFile objectFile,
+            MachLinkEditData symbolTableData,
+            MachLinkEditData stringTableData)
+        {
+            ArgumentNullException.ThrowIfNull(objectFile);
+            ArgumentNullException.ThrowIfNull(symbolTableData);
+            ArgumentNullException.ThrowIfNull(stringTableData);
+
+            this.objectFile = objectFile;
+            this.symbolTableData = symbolTableData;
+            this.stringTableData = stringTableData;
+
+            // Create a section map now since the section indexes may change later
+            sectionMap = new Dictionary<byte, MachSection>();
+            byte sectionIndex = 1;
+            foreach (var section in objectFile.Segments.SelectMany(segment => segment.Sections))
             {
-                symbolTableStream.ReadFully(symbolBuffer);
-                var symbolHeader = SymbolHeader.Read(symbolBuffer, objectFile.IsLittleEndian, out var _);
-                ulong symbolValue;
-                if (objectFile.IsLittleEndian)
-                {
-                    symbolValue = objectFile.Is64Bit ?
-                        BinaryPrimitives.ReadUInt64LittleEndian(symbolBuffer.AsSpan(SymbolHeader.BinarySize)) :
-                        BinaryPrimitives.ReadUInt32LittleEndian(symbolBuffer.AsSpan(SymbolHeader.BinarySize));
-                }
-                else
-                {
-                    symbolValue = objectFile.Is64Bit ?
-                        BinaryPrimitives.ReadUInt64BigEndian(symbolBuffer.AsSpan(SymbolHeader.BinarySize)) :
-                        BinaryPrimitives.ReadUInt32BigEndian(symbolBuffer.AsSpan(SymbolHeader.BinarySize));
-                }
+                sectionMap.Add(sectionIndex++, section);
+                Debug.Assert(sectionIndex != 0);
+            }
+        }
 
-                string name = string.Empty;
-                if (symbolHeader.NameIndex != 0)
-                {
-                    int nameLength = stringTable.AsSpan((int)symbolHeader.NameIndex).IndexOf((byte)0);
-                    Debug.Assert(nameLength >= 0);
-                    name = Encoding.UTF8.GetString(stringTable.AsSpan((int)symbolHeader.NameIndex, nameLength));
-                }
+        public MachLinkEditData SymbolTableData
+        {
+            get
+            {
+                symbolTableCollection?.FlushIfDirty();
+                return symbolTableData;
+            }
+        }
 
-                yield return new MachSymbol
-                {
-                    Name = name,
-                    Value = symbolValue,
-                };
+        public MachLinkEditData StringTableData
+        {
+            get
+            {
+                symbolTableCollection?.FlushIfDirty();
+                return stringTableData;
+            }
+        }
+
+        public IList<MachSymbol> Symbols
+        {
+            get
+            {
+                symbolTableCollection ??= new MachSymbolTableCollection(objectFile, symbolTableData, stringTableData, sectionMap);
+                return symbolTableCollection;
+            }
+        }
+
+        internal override IEnumerable<MachLinkEditData> LinkEditData
+        {
+            get
+            {
+                yield return SymbolTableData;
+                yield return StringTableData;
             }
         }
     }

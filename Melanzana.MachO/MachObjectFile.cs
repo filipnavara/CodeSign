@@ -274,46 +274,41 @@ namespace Melanzana.MachO
                 segment.VirtualAddress = virtualAddress;
                 segment.FileOffset = fileOffset;
 
-                if (!segment.IsLinkEditSegment)
+                if (!segment.IsLinkEditSegment && segment.Sections.Count > 0)
                 {
-                    if (segment.Sections.Count > 0)
+                    foreach (var section in segment.Sections)
                     {
-                        foreach (var section in segment.Sections)
+                        ulong alignment = 1u << (int)section.Log2Alignment;
+
+                        fileOffset = (fileOffset + alignment - 1) & ~(alignment - 1);
+                        virtualAddress = (virtualAddress + alignment - 1) & ~(alignment - 1);
+
+                        if (section.Type is not MachSectionType.ZeroFill or MachSectionType.GBZeroFill or MachSectionType.ThreadLocalZeroFill)
                         {
-                            ulong alignment = 1u << (int)section.Log2Alignment;
-                            ulong alignedSize = (section.Size + alignment - 1) & ~(alignment - 1);
-
-                            fileOffset = (fileOffset + alignment - 1) & ~(alignment - 1);
-                            virtualAddress = (virtualAddress + alignment - 1) & ~(alignment - 1);
-
-                            if (section.Type is not MachSectionType.ZeroFill or MachSectionType.GBZeroFill or MachSectionType.ThreadLocalZeroFill)
-                            {
-                                section.FileOffset = (uint)fileOffset;
-                                fileOffset += alignedSize;
-                                segmentFileSize = Math.Max(segmentFileSize, fileOffset - segment.FileOffset);
-                            }
-
-                            section.VirtualAddress = virtualAddress;
-                            virtualAddress += (ulong)alignedSize;
-
-                            segmentSize = Math.Max(segmentSize, virtualAddress - segment.VirtualAddress);
+                            section.FileOffset = (uint)fileOffset;
+                            fileOffset += section.Size;
+                            segmentFileSize = Math.Max(segmentFileSize, fileOffset - segment.FileOffset);
+                        }
+                        else
+                        {
+                            // The offset is unused for virtual sections.
+                            section.FileOffset = 0;
                         }
 
-                        segment.FileSize = (segmentFileSize + segmentAlignment - 1) & ~(segmentAlignment - 1);
-                        segment.Size = (segmentSize + segmentAlignment - 1) & ~(segmentAlignment - 1);
+                        section.VirtualAddress = virtualAddress;
+                        virtualAddress += section.Size;
 
-                        virtualAddress = (virtualAddress + segmentAlignment - 1) & ~(segmentAlignment - 1);
+                        segmentSize = Math.Max(segmentSize, virtualAddress - segment.VirtualAddress);
                     }
+
+                    segment.FileSize = (segmentFileSize + segmentAlignment - 1) & ~(segmentAlignment - 1);
+                    segment.Size = (segmentSize + segmentAlignment - 1) & ~(segmentAlignment - 1);
+
+                    virtualAddress = (virtualAddress + segmentAlignment - 1) & ~(segmentAlignment - 1);
                 }
             }
 
             var linkEditData = new List<MachLinkEditData>(LinkEditData);
-
-            // Sort by file offset first
-            linkEditData.Sort((sectionA, sectionB) =>
-                sectionA.FileOffset < sectionB.FileOffset ? -1 :
-                (sectionA.FileOffset > sectionB.FileOffset ? 1 : 0));
-
             foreach (var data in linkEditData)
             {
                 data.FileOffset = (uint)fileOffset;

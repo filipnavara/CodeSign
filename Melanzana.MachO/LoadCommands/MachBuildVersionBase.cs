@@ -2,7 +2,7 @@ namespace Melanzana.MachO
 {
     public abstract class MachBuildVersionBase : MachLoadCommand
     {
-        internal static readonly Version EmptyVersion = new Version();
+        internal static readonly Version EmptyVersion = new Version(0, 0, 0);
 
         public abstract MachPlatform Platform { get; }
 

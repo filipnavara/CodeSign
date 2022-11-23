@@ -1,9 +1,8 @@
-using System.Buffers.Binary;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Text;
 using Melanzana.MachO.BinaryFormat;
 using Melanzana.Streams;
+using System.Buffers.Binary;
+using System.Diagnostics;
+using System.Text;
 
 namespace Melanzana.MachO
 {
@@ -13,7 +12,7 @@ namespace Melanzana.MachO
         {
             var segmentHeader = SegmentHeader.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), objectFile.IsLittleEndian, out var _);
 
-            var machSegment = segmentHeader.NumberOfSections == 0 && segmentHeader.FileSize != 0 ? 
+            var machSegment = segmentHeader.NumberOfSections == 0 && segmentHeader.FileSize != 0 ?
                 new MachSegment(objectFile, segmentHeader.Name, stream.Slice(segmentHeader.FileOffset, segmentHeader.FileSize)) :
                 new MachSegment(objectFile, segmentHeader.Name);
             machSegment.FileOffset = segmentHeader.FileOffset;
@@ -71,7 +70,7 @@ namespace Melanzana.MachO
         {
             var segmentHeader = Segment64Header.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), objectFile.IsLittleEndian, out var _);
 
-            var machSegment = segmentHeader.NumberOfSections == 0 && segmentHeader.FileSize != 0 ? 
+            var machSegment = segmentHeader.NumberOfSections == 0 && segmentHeader.FileSize != 0 ?
                 new MachSegment(objectFile, segmentHeader.Name, stream.Slice((long)segmentHeader.FileOffset, (long)segmentHeader.FileSize)) :
                 new MachSegment(objectFile, segmentHeader.Name);
             machSegment.FileOffset = segmentHeader.FileOffset;
@@ -258,6 +257,37 @@ namespace Melanzana.MachO
                     twoLevelHintsHeader.NumberOfHints * sizeof(uint)));
         }
 
+        private static MachUuid ReadUuid(ReadOnlySpan<byte> loadCommandPtr)
+        {
+            return new MachUuid()
+            {
+                Uuid = new Guid(loadCommandPtr.Slice(LoadCommandHeader.BinarySize, 16)),
+            };
+        }
+
+        private static MachSourceVersion ReadSourceVersion(ReadOnlySpan<byte> loadCommandPtr, bool isLittleEndian)
+            => MachSourceVersion.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), isLittleEndian, out int _);
+
+        private static MachEncryptionInfo ReadEncryptionInfo64(ReadOnlySpan<byte> loadCommandPtr, bool isLittleEndian)
+            => MachEncryptionInfo.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), isLittleEndian, out int _);
+
+        private static MachRunPath ReadRunPath(ReadOnlySpan<byte> loadCommandPtr, bool isLittleEndian)
+        {
+            var offset =
+                isLittleEndian
+                ? BinaryPrimitives.ReadUInt32LittleEndian(loadCommandPtr.Slice(LoadCommandHeader.BinarySize))
+                : BinaryPrimitives.ReadUInt32BigEndian(loadCommandPtr.Slice(LoadCommandHeader.BinarySize));
+
+            var nameSlice = loadCommandPtr.Slice((int)offset);
+            int zeroIndex = nameSlice.IndexOf((byte)0);
+            string name = zeroIndex >= 0 ? Encoding.UTF8.GetString(nameSlice.Slice(0, zeroIndex)) : Encoding.UTF8.GetString(nameSlice);
+
+            return new MachRunPath()
+            {
+                RunPath = name,
+            };
+        }
+
         private static MachObjectFile ReadSingle(FatArchHeader? fatArchHeader, MachMagic magic, Stream stream)
         {
             Span<byte> headerBuffer = stackalloc byte[Math.Max(MachHeader.BinarySize, MachHeader64.BinarySize)];
@@ -329,11 +359,15 @@ namespace Melanzana.MachO
                     MachLoadCommandType.BuildVersion => ReadBuildVersion(loadCommandPtr, isLittleEndian),
                     MachLoadCommandType.SymbolTable => ReadSymbolTable(loadCommandPtr, objectFile, stream),
                     MachLoadCommandType.DynamicLinkEditSymbolTable => ReadDynamicLinkEditSymbolTable(loadCommandPtr, isLittleEndian),
-                    MachLoadCommandType.DyldInfo => ReadDyldInfo(loadCommandHeader.CommandType,  loadCommandPtr, objectFile, stream),
+                    MachLoadCommandType.DyldInfo => ReadDyldInfo(loadCommandHeader.CommandType, loadCommandPtr, objectFile, stream),
                     MachLoadCommandType.DyldInfoOnly => ReadDyldInfo(loadCommandHeader.CommandType, loadCommandPtr, objectFile, stream),
                     MachLoadCommandType.TowLevelHints => ReadTwoLevelHints(loadCommandPtr, objectFile, stream),
+                    MachLoadCommandType.Uuid => ReadUuid(loadCommandPtr),
+                    MachLoadCommandType.SourceVersion => ReadSourceVersion(loadCommandPtr, objectFile.IsLittleEndian),
+                    MachLoadCommandType.EncryptionInfo64 => ReadEncryptionInfo64(loadCommandPtr, objectFile.IsLittleEndian),
+                    MachLoadCommandType.Rpath => ReadRunPath(loadCommandPtr, objectFile.IsLittleEndian),
                     _ => new MachCustomLoadCommand(loadCommandHeader.CommandType, loadCommandPtr.Slice(LoadCommandHeader.BinarySize, (int)loadCommandHeader.CommandSize - LoadCommandHeader.BinarySize).ToArray()),
-                });
+                }); ;
                 loadCommandPtr = loadCommandPtr.Slice((int)loadCommandHeader.CommandSize);
             }
 

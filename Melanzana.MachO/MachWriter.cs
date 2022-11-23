@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Data;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -301,6 +302,69 @@ namespace Melanzana.MachO
             stream.Write(dyldInfoHeaderBuffer);
         }
 
+        private static void WriteUuid(Stream stream, MachUuid uuid, bool isLittleEndian)
+        {
+            WriteLoadCommandHeader(
+                stream,
+                MachLoadCommandType.Uuid,
+                LoadCommandHeader.BinarySize + 16,
+                isLittleEndian);
+
+            Span<byte> uuidBuffer = stackalloc byte[16];
+            uuid.Uuid.TryWriteBytes(uuidBuffer);
+            stream.Write(uuidBuffer);
+        }
+
+        private static void WriteSourceVersion(Stream stream, MachSourceVersion sourceVersion, bool isLittleEndian)
+        {
+            WriteLoadCommandHeader(
+                stream,
+                MachLoadCommandType.SourceVersion,
+                LoadCommandHeader.BinarySize + MachSourceVersion.BinarySize,
+                isLittleEndian);
+
+            Span<byte> sourceVersionBuffer = stackalloc byte[MachSourceVersion.BinarySize];
+            sourceVersion.Write(sourceVersionBuffer, isLittleEndian, out var _);
+            stream.Write(sourceVersionBuffer);
+        }
+
+        private static void WriteEncryptionInfo64(Stream stream, MachEncryptionInfo encryptionInfo, bool isLittleEndian)
+        {
+            WriteLoadCommandHeader(
+                stream,
+                MachLoadCommandType.EncryptionInfo64,
+                LoadCommandHeader.BinarySize + MachEncryptionInfo.BinarySize,
+                isLittleEndian);
+
+            Span<byte> encryptionInfoBuffer = stackalloc byte[MachEncryptionInfo.BinarySize];
+            encryptionInfo.Write(encryptionInfoBuffer, isLittleEndian, out var _);
+            stream.Write(encryptionInfoBuffer);
+        }
+
+        private static void WriteRunPath(Stream stream, MachRunPath runPath, bool isLittleEndian, bool is64Bit)
+        {
+            var valueLength = 4 + Encoding.UTF8.GetByteCount(runPath.RunPath) + 1;
+            int commandSize = AlignedSize(
+                LoadCommandHeader.BinarySize + valueLength,
+                is64Bit);
+
+            WriteLoadCommandHeader(
+                stream,
+                MachLoadCommandType.Rpath,
+                commandSize,
+                isLittleEndian);
+
+            Span<byte> buffer = stackalloc byte[valueLength];
+            // NameOffset
+            BinaryPrimitives.WriteInt32LittleEndian(buffer, LoadCommandHeader.BinarySize + 4);
+            Encoding.UTF8.GetBytes(runPath.RunPath, buffer.Slice(4));
+            buffer[buffer.Length - 1] = 0;
+
+            // The name is always written with terminating `\0` and aligned to platform
+            // pointer size.
+            stream.WritePadding(commandSize - valueLength);
+        }
+
         private static void WriteTwoLevelHintsCommand(Stream stream, MachTwoLevelHints twoLevelHints, bool isLittleEndian)
         {
             WriteLoadCommandHeader(
@@ -363,8 +427,13 @@ namespace Melanzana.MachO
                         WriteLoadCommandHeader(loadCommandsStream, customLoadCommand.Type, customLoadCommand.Data.Length + LoadCommandHeader.BinarySize, isLittleEndian);
                         loadCommandsStream.Write(customLoadCommand.Data);
                         break;
+                    case MachUuid uuid: WriteUuid(loadCommandsStream, uuid, isLittleEndian); break;
+                    case MachSourceVersion sourceVersion: WriteSourceVersion(loadCommandsStream, sourceVersion, isLittleEndian); break;
+                    case MachEncryptionInfo encryptionInfo: WriteEncryptionInfo64(loadCommandsStream, encryptionInfo, isLittleEndian); break;
+                    case MachRunPath runPath: WriteRunPath(loadCommandsStream, runPath, isLittleEndian, objectFile.Is64Bit); break;
+
                     default:
-                        Debug.Fail("Unknown load command");
+                        Debug.Fail($"Unknown load command {loadCommand.GetType().Name}");
                         break;
                 }
             }

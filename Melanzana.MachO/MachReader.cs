@@ -376,6 +376,8 @@ namespace Melanzana.MachO
 
         public static IEnumerable<MachObjectFile> Read(Stream stream)
         {
+            ArgumentNullException.ThrowIfNull(stream);
+
             var magicBuffer = new byte[4];
             stream.ReadFully(magicBuffer);
 

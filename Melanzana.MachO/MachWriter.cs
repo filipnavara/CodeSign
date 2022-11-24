@@ -359,10 +359,11 @@ namespace Melanzana.MachO
             BinaryPrimitives.WriteInt32LittleEndian(buffer, LoadCommandHeader.BinarySize + 4);
             Encoding.UTF8.GetBytes(runPath.RunPath, buffer.Slice(4));
             buffer[buffer.Length - 1] = 0;
+            stream.Write(buffer);
 
             // The name is always written with terminating `\0` and aligned to platform
             // pointer size.
-            stream.WritePadding(commandSize - valueLength);
+            stream.WritePadding(commandSize - LoadCommandHeader.BinarySize - valueLength);
         }
 
         private static void WriteTwoLevelHintsCommand(Stream stream, MachTwoLevelHints twoLevelHints, bool isLittleEndian)

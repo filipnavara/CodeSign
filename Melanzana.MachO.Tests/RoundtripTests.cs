@@ -44,5 +44,12 @@ namespace Melanzana.MachO.Tests
             var aOutStream = typeof(RoundtripTests).Assembly.GetManifestResourceStream("Melanzana.MachO.Tests.Data.a.o")!;
             TestRoundtrip(aOutStream);
         }
+
+        [Fact]
+        public void ExecutableRoundtrip()
+        {
+            var aOutStream = typeof(RoundtripTests).Assembly.GetManifestResourceStream("Melanzana.MachO.Tests.Data.rpath.out")!;
+            TestRoundtrip(aOutStream);
+        }
     }
 }

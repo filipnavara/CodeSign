@@ -13,6 +13,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Melanzana.CodeSign", "Melan
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Melanzana.CodeSign.Tests", "Melanzana.CodeSign.Tests\Melanzana.CodeSign.Tests.csproj", "{30D19045-7A46-4993-B018-1F60397A741D}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Melanzana.Streams", "Melanzana.Streams\Melanzana.Streams.csproj", "{DF6E2C80-90A8-4C69-AD60-E494A6D4267B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -39,6 +41,10 @@ Global
 		{30D19045-7A46-4993-B018-1F60397A741D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{30D19045-7A46-4993-B018-1F60397A741D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{30D19045-7A46-4993-B018-1F60397A741D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DF6E2C80-90A8-4C69-AD60-E494A6D4267B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DF6E2C80-90A8-4C69-AD60-E494A6D4267B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DF6E2C80-90A8-4C69-AD60-E494A6D4267B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DF6E2C80-90A8-4C69-AD60-E494A6D4267B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

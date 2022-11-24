@@ -367,7 +367,7 @@ namespace Melanzana.MachO
                     MachLoadCommandType.EncryptionInfo64 => ReadEncryptionInfo64(loadCommandPtr, objectFile.IsLittleEndian),
                     MachLoadCommandType.Rpath => ReadRunPath(loadCommandPtr, objectFile.IsLittleEndian),
                     _ => new MachCustomLoadCommand(loadCommandHeader.CommandType, loadCommandPtr.Slice(LoadCommandHeader.BinarySize, (int)loadCommandHeader.CommandSize - LoadCommandHeader.BinarySize).ToArray()),
-                }); ;
+                });
                 loadCommandPtr = loadCommandPtr.Slice((int)loadCommandHeader.CommandSize);
             }
 

@@ -342,22 +342,37 @@ namespace Melanzana.MachO
         }
 
         private static void WriteRunPath(Stream stream, MachRunPath runPath, bool isLittleEndian, bool is64Bit)
+            => WriteStringCommand(stream, MachLoadCommandType.Rpath, runPath.RunPath, isLittleEndian, is64Bit);
+
+
+        private static void WriteLoadDylinker(Stream stream, MachLoadDylinkerCommand loadDylinker, bool isLittleEndian, bool is64Bit)
+            => WriteStringCommand(stream, MachLoadCommandType.LoadDylinker, loadDylinker.Name, isLittleEndian, is64Bit);
+
+        private static void WriteStringCommand(Stream stream, MachLoadCommandType commandType, string value, bool isLittleEndian, bool is64Bit)
         {
-            var valueLength = 4 + Encoding.UTF8.GetByteCount(runPath.RunPath) + 1;
+            var valueLength = 4 + Encoding.UTF8.GetByteCount(value) + 1;
             int commandSize = AlignedSize(
                 LoadCommandHeader.BinarySize + valueLength,
                 is64Bit);
 
             WriteLoadCommandHeader(
                 stream,
-                MachLoadCommandType.Rpath,
+                commandType,
                 commandSize,
                 isLittleEndian);
 
             Span<byte> buffer = stackalloc byte[valueLength];
             // NameOffset
-            BinaryPrimitives.WriteInt32LittleEndian(buffer, LoadCommandHeader.BinarySize + 4);
-            Encoding.UTF8.GetBytes(runPath.RunPath, buffer.Slice(4));
+            if (isLittleEndian)
+            {
+                BinaryPrimitives.WriteInt32LittleEndian(buffer, LoadCommandHeader.BinarySize + 4);
+            }
+            else
+            {
+                BinaryPrimitives.WriteInt32BigEndian(buffer, LoadCommandHeader.BinarySize + 4);
+            }
+
+            Encoding.UTF8.GetBytes(value, buffer.Slice(4));
             buffer[buffer.Length - 1] = 0;
             stream.Write(buffer);
 
@@ -432,6 +447,7 @@ namespace Melanzana.MachO
                     case MachSourceVersion sourceVersion: WriteSourceVersion(loadCommandsStream, sourceVersion, isLittleEndian); break;
                     case MachEncryptionInfo encryptionInfo: WriteEncryptionInfo64(loadCommandsStream, encryptionInfo, isLittleEndian); break;
                     case MachRunPath runPath: WriteRunPath(loadCommandsStream, runPath, isLittleEndian, objectFile.Is64Bit); break;
+                    case MachLoadDylinkerCommand loadDylinker: WriteLoadDylinker(loadCommandsStream, loadDylinker, isLittleEndian, objectFile.Is64Bit); break;
 
                     default:
                         Debug.Fail($"Unknown load command {loadCommand.GetType().Name}");

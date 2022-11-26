@@ -48,7 +48,7 @@ namespace Melanzana.CodeSign
                     {
                         mainExecutable = (string)bundleExecutable;
                     }
-                    
+
                     if (!File.Exists(Path.Combine(ContentsPath, mainExecutable)))
                     {
                         mainExecutable = null;
@@ -89,7 +89,17 @@ namespace Melanzana.CodeSign
 
             if (useV2Rules)
             {
+                builder.AddRule(new ResourceRule(".*\\.dSYM($|/)") { Weight = 11 });
+
+                builder.AddRule(new ResourceRule("^(.*/)?\\.DS_Store$") { IsOmitted = true, Weight = 2000 });
+
                 builder.AddRule(new ResourceRule("^.*"));
+
+                builder.AddRule(new ResourceRule("^.*\\.lproj/") { IsOptional = true, Weight = 1000 });
+
+                builder.AddRule(new ResourceRule("^.*\\.lproj/locversion.plist$") { IsOmitted = true, Weight = 1100 });
+
+                builder.AddRule(new ResourceRule("^Base\\.lproj/") { Weight = 1010 });
 
                 // On macOS include nested signatures
                 if (hasResources)
@@ -99,27 +109,23 @@ namespace Melanzana.CodeSign
                     builder.AddRule(new ResourceRule($"^{resourcePrefix}") { Weight = 20 });
                 }
 
-                builder.AddRule(new ResourceRule(".*\\.dSYM($|/)") { Weight = 11 });
-
                 // Exclude specific files:
                 builder.AddRule(new ResourceRule("^Info\\.plist$") { IsOmitted = true, Weight = 20 });
                 builder.AddRule(new ResourceRule("^PkgInfo$") { IsOmitted = true, Weight = 20 });
 
                 // Include specific files:
                 builder.AddRule(new ResourceRule("^embedded\\.provisionprofile$") { Weight = 20 });
-                builder.AddRule(new ResourceRule("^version.plist$") { Weight = 20 });
-
-                builder.AddRule(new ResourceRule("^(.*/)?\\.DS_Store$") { IsOmitted = true, Weight = 2000 });
+                builder.AddRule(new ResourceRule("^version\\.plist$") { Weight = 20 });
             }
             else
             {
-                builder.AddRule(new ResourceRule("^version.plist$"));
                 builder.AddRule(new ResourceRule(hasResources ? $"^{resourcePrefix}" : "^.*"));
-            }
 
-            builder.AddRule(new ResourceRule($"^{resourcePrefix}.*\\.lproj/") { IsOptional = true, Weight = 1000 });
-            builder.AddRule(new ResourceRule($"^{resourcePrefix}Base\\.lproj/") { Weight = 1010 });
-            builder.AddRule(new ResourceRule($"^{resourcePrefix}.*\\.lproj/locversion.plist$") { IsOmitted = true, Weight = 1100 });
+                builder.AddRule(new ResourceRule($"^{resourcePrefix}.*\\.lproj/") { IsOptional = true, Weight = 1000 });
+                builder.AddRule(new ResourceRule($"^{resourcePrefix}.*\\.lproj/locversion.plist$") { IsOmitted = true, Weight = 1100 });
+                builder.AddRule(new ResourceRule($"^{resourcePrefix}Base\\.lproj/") { Weight = 1010 });
+                builder.AddRule(new ResourceRule("^version.plist$"));
+            }
 
             // Add implicit exclusions
             builder.AddExclusion("_CodeSignature");

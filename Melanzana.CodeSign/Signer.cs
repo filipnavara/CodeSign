@@ -262,14 +262,14 @@ namespace Melanzana.CodeSign
                 else
                 {
                     var rulePList = new NSDictionary();
-                    if (rule.Weight != 1)
-                        rulePList.Add("weight", (double)rule.Weight);
-                    if (rule.IsOmitted)
-                        rulePList.Add("omit", true);
                     if (rule.IsOptional)
                         rulePList.Add("optional", true);
                     if (rule.IsNested)
                         rulePList.Add("nested", true);
+                    if (rule.IsOmitted)
+                        rulePList.Add("omit", true);
+                    if (rule.Weight != 1)
+                        rulePList.Add("weight", (double)rule.Weight);
                     rulesPList.Add(rule.Pattern, rulePList);
                 }
             }
@@ -277,7 +277,7 @@ namespace Melanzana.CodeSign
             return rulesPList;
         }
 
-        private NSDictionary BuildResourceSeal(Bundle bundle)
+        public NSDictionary BuildResourceSeal(Bundle bundle)
         {
             var sha1 = IncrementalHash.CreateHash(HashAlgorithmName.SHA1);
             var sha256 = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);

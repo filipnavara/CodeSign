@@ -9,19 +9,32 @@ namespace Melanzana.MachO.Tests
     {
         private static void TestRoundtrip(Stream aOutStream)
         {
-            var outputStream = new MemoryStream();
+            var objectFile = MachReader.Read(aOutStream).Single();
+
+            using (MemoryStream cloneStream = new MemoryStream((int)aOutStream.Length))
+            using (var outputStream = new ValidatingStream(cloneStream))
+            {
+                aOutStream.Seek(0, SeekOrigin.Begin);
+                aOutStream.CopyTo(cloneStream);
+                outputStream.Seek(0, SeekOrigin.Begin);
+
+                MachWriter.Write(outputStream, objectFile);
+            }
+        }
+
+        private static void TestFatRoundtrip(Stream aOutStream)
+        {
             var objectFiles = MachReader.Read(aOutStream).ToList();
-            MachWriter.Write(outputStream, objectFiles);
 
-            aOutStream.Position = 0;
-            outputStream.Position = 0;
-            Assert.Equal(aOutStream.Length, outputStream.Length);
+            using (MemoryStream cloneStream = new MemoryStream((int)aOutStream.Length))
+            using (var outputStream = new ValidatingStream(cloneStream))
+            {
+                aOutStream.Seek(0, SeekOrigin.Begin);
+                aOutStream.CopyTo(cloneStream);
+                outputStream.Seek(0, SeekOrigin.Begin);
 
-            var input = new byte[aOutStream.Length];
-            var output = new byte[aOutStream.Length];
-            aOutStream.ReadFully(input);
-            outputStream.ReadFully(output);
-            Assert.Equal(input, output);
+                MachWriter.Write(outputStream, objectFiles);
+        }
         }
 
         [Fact]
@@ -35,7 +48,7 @@ namespace Melanzana.MachO.Tests
         public void FatRoundtrip()
         {
             var aFatOutStream = typeof(RoundtripTests).Assembly.GetManifestResourceStream("Melanzana.MachO.Tests.Data.a.fat.out")!;
-            TestRoundtrip(aFatOutStream);
+            TestFatRoundtrip(aFatOutStream);
         }
 
         [Fact]

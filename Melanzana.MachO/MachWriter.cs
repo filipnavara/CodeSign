@@ -598,47 +598,47 @@ namespace Melanzana.MachO
             // Always use a fat object, even if the caller only passes one object file.
             // Callers wishing to write a non-fat archive can call Write(Stream, MachObjectFile)
             // to express their intent.
-                var fatMagic = new byte[4];
-                var fatHeader = new FatHeader { NumberOfFatArchitectures = (uint)objectFiles.Count };
-                var fatHeaderBytes = new byte[FatHeader.BinarySize];
-                var fatArchHeaderBytes = new byte[FatArchHeader.BinarySize];
+            var fatMagic = new byte[4];
+            var fatHeader = new FatHeader { NumberOfFatArchitectures = (uint)objectFiles.Count };
+            var fatHeaderBytes = new byte[FatHeader.BinarySize];
+            var fatArchHeaderBytes = new byte[FatArchHeader.BinarySize];
 
-                BinaryPrimitives.WriteUInt32BigEndian(fatMagic, (uint)MachMagic.FatMagicBigEndian);
-                fatHeader.Write(fatHeaderBytes, isLittleEndian: false, out var _);
-                stream.Write(fatMagic);
-                stream.Write(fatHeaderBytes);
+            BinaryPrimitives.WriteUInt32BigEndian(fatMagic, (uint)MachMagic.FatMagicBigEndian);
+            fatHeader.Write(fatHeaderBytes, isLittleEndian: false, out var _);
+            stream.Write(fatMagic);
+            stream.Write(fatHeaderBytes);
 
-                uint offset = (uint)(4 + FatHeader.BinarySize + objectFiles.Count * FatArchHeader.BinarySize);
-                uint alignment = 0x4000;
-                foreach (var objectFile in objectFiles)
+            uint offset = (uint)(4 + FatHeader.BinarySize + objectFiles.Count * FatArchHeader.BinarySize);
+            uint alignment = 0x4000;
+            foreach (var objectFile in objectFiles)
+            {
+                uint size = (uint)objectFile.GetSize();
+
+                offset = (offset + alignment - 1) & ~(alignment - 1);
+                var fatArchHeader = new FatArchHeader
                 {
-                    uint size = (uint)objectFile.GetSize();
+                    CpuType = objectFile.CpuType,
+                    CpuSubType = objectFile.CpuSubType,
+                    Offset = offset,
+                    Size = size,
+                    Alignment = (uint)Math.Log2(alignment),
+                };
 
-                    offset = (offset + alignment - 1) & ~(alignment - 1);
-                    var fatArchHeader = new FatArchHeader
-                    {
-                        CpuType = objectFile.CpuType,
-                        CpuSubType = objectFile.CpuSubType,
-                        Offset = offset,
-                        Size = size,
-                        Alignment = (uint)Math.Log2(alignment),
-                    };
+                fatArchHeader.Write(fatArchHeaderBytes, isLittleEndian: false, out var _);
+                stream.Write(fatArchHeaderBytes);
 
-                    fatArchHeader.Write(fatArchHeaderBytes, isLittleEndian: false, out var _);
-                    stream.Write(fatArchHeaderBytes);
+                offset += size;
+            }
 
-                    offset += size;
-                }
-
-                offset = (uint)(4 + FatHeader.BinarySize + objectFiles.Count * FatArchHeader.BinarySize);
-                foreach (var objectFile in objectFiles)
-                {
-                    uint size = (uint)objectFile.GetSize();
-                    uint alignedOffset = (offset + alignment - 1) & ~(alignment - 1);
-                    stream.WritePadding(alignedOffset - offset);
-                    Write(stream, objectFile);
-                    offset = alignedOffset + size;
-                }
+            offset = (uint)(4 + FatHeader.BinarySize + objectFiles.Count * FatArchHeader.BinarySize);
+            foreach (var objectFile in objectFiles)
+            {
+                uint size = (uint)objectFile.GetSize();
+                uint alignedOffset = (offset + alignment - 1) & ~(alignment - 1);
+                stream.WritePadding(alignedOffset - offset);
+                Write(stream, objectFile);
+                offset = alignedOffset + size;
             }
         }
     }
+}

@@ -330,13 +330,14 @@ namespace Melanzana.MachO
 
         private static void WriteEncryptionInfo64(Stream stream, MachEncryptionInfo encryptionInfo, bool isLittleEndian)
         {
+            // There are 4 bytes of padding at the end of a 64-bit encryption info struct
             WriteLoadCommandHeader(
                 stream,
                 MachLoadCommandType.EncryptionInfo64,
-                LoadCommandHeader.BinarySize + MachEncryptionInfo.BinarySize,
+                LoadCommandHeader.BinarySize + MachEncryptionInfo.BinarySize + 4,
                 isLittleEndian);
 
-            Span<byte> encryptionInfoBuffer = stackalloc byte[MachEncryptionInfo.BinarySize];
+            Span<byte> encryptionInfoBuffer = stackalloc byte[MachEncryptionInfo.BinarySize + 4];
             encryptionInfo.Write(encryptionInfoBuffer, isLittleEndian, out var _);
             stream.Write(encryptionInfoBuffer);
         }

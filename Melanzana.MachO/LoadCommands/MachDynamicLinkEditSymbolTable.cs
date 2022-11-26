@@ -1,18 +1,21 @@
 using Melanzana.MachO.BinaryFormat;
+using System.Diagnostics;
 
 namespace Melanzana.MachO
 {
     public class MachDynamicLinkEditSymbolTable : MachLoadCommand
     {
+        private readonly Stream stream;
         internal DynamicSymbolTableCommandHeader Header;
 
-        public MachDynamicLinkEditSymbolTable()
+        public MachDynamicLinkEditSymbolTable(Stream stream)
         {
             this.Header = new DynamicSymbolTableCommandHeader();
+            this.stream = stream ?? throw new ArgumentNullException(nameof(stream));
         }
 
-        public MachDynamicLinkEditSymbolTable(MachSymbolTable symbolTable)
-            : this()
+        public MachDynamicLinkEditSymbolTable(Stream stream, MachSymbolTable symbolTable)
+            : this(stream)
         {
             Span<bool> bucketUsed = stackalloc bool[3];
             var symbols = symbolTable.Symbols;
@@ -64,9 +67,10 @@ namespace Melanzana.MachO
             }
         }
 
-        internal MachDynamicLinkEditSymbolTable(DynamicSymbolTableCommandHeader header)
+        internal MachDynamicLinkEditSymbolTable(Stream stream, DynamicSymbolTableCommandHeader header)
         {
             this.Header = header;
+            this.stream = stream ?? throw new ArgumentNullException(nameof(stream));
         }
 
         public uint LocalSymbolsIndex
@@ -175,6 +179,30 @@ namespace Melanzana.MachO
         {
             get => Header.LocalRelocationTableCount;
             set => Header.LocalRelocationTableCount = value;
+        }
+
+        internal override IEnumerable<MachLinkEditData> LinkEditData
+        {
+            get
+            {
+                Debug.Assert(TableOfContentsCount == 0);
+                yield return new MachLinkEditData(stream, TableOfContentsOffset, TableOfContentsCount);
+
+                Debug.Assert(ModuleTableCount == 0);
+                yield return new MachLinkEditData(stream, ModuleTableOffset, ModuleTableCount);
+
+                Debug.Assert(ExternalReferenceTableCount == 0);
+                yield return new MachLinkEditData(stream, ExternalReferenceTableOffset, ExternalReferenceTableCount);
+
+                // An indirect symbol table is a list of 32-bit values
+                yield return new MachLinkEditData(stream, IndirectSymbolTableOffset, IndirectSymbolTableCount * 4);
+
+                Debug.Assert(ExternalReferenceTableCount == 0);
+                yield return new MachLinkEditData(stream, ExternalReferenceTableOffset, ExternalReferenceTableCount);
+
+                Debug.Assert(ExternalRelocationTableCount == 0);
+                yield return new MachLinkEditData(stream, LocalRelocationTableOffset, LocalRelocationTableCount);
+            }
         }
     }
 }

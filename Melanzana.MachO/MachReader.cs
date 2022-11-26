@@ -216,12 +216,12 @@ namespace Melanzana.MachO
                 new MachLinkEditData(stream, symbolTableHeader.StringTableOffset, symbolTableHeader.StringTableSize));
         }
 
-        private static MachDynamicLinkEditSymbolTable ReadDynamicLinkEditSymbolTable(ReadOnlySpan<byte> loadCommandPtr, bool isLittleEndian)
+        private static MachDynamicLinkEditSymbolTable ReadDynamicLinkEditSymbolTable(ReadOnlySpan<byte> loadCommandPtr, bool isLittleEndian, Stream stream)
         {
             var dynamicSymbolTableHeader = DynamicSymbolTableCommandHeader.Read(loadCommandPtr.Slice(LoadCommandHeader.BinarySize), isLittleEndian, out var _);
 
             // TODO: Clean up
-            return new MachDynamicLinkEditSymbolTable(dynamicSymbolTableHeader);
+            return new MachDynamicLinkEditSymbolTable(stream, dynamicSymbolTableHeader);
         }
 
         private static MachDyldInfo ReadDyldInfo(
@@ -358,7 +358,7 @@ namespace Melanzana.MachO
                     MachLoadCommandType.VersionMinWatchOS => ReadVersionMinCommand<MachVersionMinWatchOS>(loadCommandPtr, isLittleEndian),
                     MachLoadCommandType.BuildVersion => ReadBuildVersion(loadCommandPtr, isLittleEndian),
                     MachLoadCommandType.SymbolTable => ReadSymbolTable(loadCommandPtr, objectFile, stream),
-                    MachLoadCommandType.DynamicLinkEditSymbolTable => ReadDynamicLinkEditSymbolTable(loadCommandPtr, isLittleEndian),
+                    MachLoadCommandType.DynamicLinkEditSymbolTable => ReadDynamicLinkEditSymbolTable(loadCommandPtr, isLittleEndian, stream),
                     MachLoadCommandType.DyldInfo => ReadDyldInfo(loadCommandHeader.CommandType, loadCommandPtr, objectFile, stream),
                     MachLoadCommandType.DyldInfoOnly => ReadDyldInfo(loadCommandHeader.CommandType, loadCommandPtr, objectFile, stream),
                     MachLoadCommandType.TowLevelHints => ReadTwoLevelHints(loadCommandPtr, objectFile, stream),

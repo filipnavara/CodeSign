@@ -595,12 +595,9 @@ namespace Melanzana.MachO
 
         public static void Write(Stream stream, IList<MachObjectFile> objectFiles)
         {
-            if (objectFiles.Count == 1)
-            {
-                Write(stream, objectFiles[0]);
-            }
-            else if (objectFiles.Count > 1)
-            {
+            // Always use a fat object, even if the caller only passes one object file.
+            // Callers wishing to write a non-fat archive can call Write(Stream, MachObjectFile)
+            // to express their intent.
                 var fatMagic = new byte[4];
                 var fatHeader = new FatHeader { NumberOfFatArchitectures = (uint)objectFiles.Count };
                 var fatHeaderBytes = new byte[FatHeader.BinarySize];

@@ -642,4 +642,3 @@ namespace Melanzana.MachO
             }
         }
     }
-}

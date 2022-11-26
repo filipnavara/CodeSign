@@ -399,6 +399,63 @@ namespace Melanzana.MachO
             stream.Write(twoLevelHintsHeaderBuffer);
         }
 
+        private static void WriteLoadCommands(Stream loadCommandsStream, MachObjectFile objectFile)
+        {
+            var loadCommandsStart = loadCommandsStream.Position;
+
+            foreach (var loadCommand in objectFile.LoadCommands)
+            {
+                switch (loadCommand)
+                {
+                    case MachSegment segment: WriteSegment(loadCommandsStream, segment, objectFile.IsLittleEndian, objectFile.Is64Bit); break;
+                    case MachCodeSignature codeSignature: WriteLinkEdit(loadCommandsStream, MachLoadCommandType.CodeSignature, codeSignature, objectFile.IsLittleEndian); break;
+                    case MachDylibCodeSigningDirs codeSigningDirs: WriteLinkEdit(loadCommandsStream, MachLoadCommandType.DylibCodeSigningDRs, codeSigningDirs, objectFile.IsLittleEndian); break;
+                    case MachSegmentSplitInfo segmentSplitInfo: WriteLinkEdit(loadCommandsStream, MachLoadCommandType.SegmentSplitInfo, segmentSplitInfo, objectFile.IsLittleEndian); break;
+                    case MachFunctionStarts functionStarts: WriteLinkEdit(loadCommandsStream, MachLoadCommandType.FunctionStarts, functionStarts, objectFile.IsLittleEndian); break;
+                    case MachDataInCode dataInCode: WriteLinkEdit(loadCommandsStream, MachLoadCommandType.DataInCode, dataInCode, objectFile.IsLittleEndian); break;
+                    case MachLinkerOptimizationHint linkerOptimizationHint: WriteLinkEdit(loadCommandsStream, MachLoadCommandType.LinkerOptimizationHint, linkerOptimizationHint, objectFile.IsLittleEndian); break;
+                    case MachDyldExportsTrie dyldExportsTrie: WriteLinkEdit(loadCommandsStream, MachLoadCommandType.DyldExportsTrie, dyldExportsTrie, objectFile.IsLittleEndian); break;
+                    case MachDyldChainedFixups dyldChainedFixups: WriteLinkEdit(loadCommandsStream, MachLoadCommandType.DyldChainedFixups, dyldChainedFixups, objectFile.IsLittleEndian); break;
+                    case MachLoadDylibCommand loadDylibCommand: WriteDylibCommand(loadCommandsStream, MachLoadCommandType.LoadDylib, loadDylibCommand, objectFile.IsLittleEndian, objectFile.Is64Bit); break;
+                    case MachLoadWeakDylibCommand loadWeakDylibCommand: WriteDylibCommand(loadCommandsStream, MachLoadCommandType.LoadWeakDylib, loadWeakDylibCommand, objectFile.IsLittleEndian, objectFile.Is64Bit); break;
+                    case MachReexportDylibCommand reexportDylibCommand: WriteDylibCommand(loadCommandsStream, MachLoadCommandType.ReexportDylib, reexportDylibCommand, objectFile.IsLittleEndian, objectFile.Is64Bit); break;
+                    case MachEntrypointCommand entrypointCommand: WriteMainCommand(loadCommandsStream, entrypointCommand, objectFile.IsLittleEndian); break;
+                    case MachVersionMinMacOS macOSBuildVersion: WriteVersionMinCommand(loadCommandsStream, MachLoadCommandType.VersionMinMacOS, macOSBuildVersion, objectFile.IsLittleEndian); break;
+                    case MachVersionMinIOS iOSBuildVersion: WriteVersionMinCommand(loadCommandsStream, MachLoadCommandType.VersionMinIPhoneOS, iOSBuildVersion, objectFile.IsLittleEndian); break;
+                    case MachVersionMinTvOS tvOSBuildVersion: WriteVersionMinCommand(loadCommandsStream, MachLoadCommandType.VersionMinTvOS, tvOSBuildVersion, objectFile.IsLittleEndian); break;
+                    case MachVersionMinWatchOS watchOSBuildVersion: WriteVersionMinCommand(loadCommandsStream, MachLoadCommandType.VersionMinWatchOS, watchOSBuildVersion, objectFile.IsLittleEndian); break;
+                    case MachBuildVersion buildVersion: WriteBuildVersion(loadCommandsStream, buildVersion, objectFile.IsLittleEndian); break;
+                    case MachSymbolTable symbolTable: WriteSymbolTableCommand(loadCommandsStream, symbolTable, objectFile.IsLittleEndian, objectFile.Is64Bit); break;
+                    case MachDynamicLinkEditSymbolTable dySymbolTable: WriteDynamicLinkEditSymbolTableCommand(loadCommandsStream, dySymbolTable, objectFile.IsLittleEndian); break;
+                    case MachDyldInfoOnly dyldInfoOnly: WriteDyldInfoCommand(loadCommandsStream, MachLoadCommandType.DyldInfoOnly, dyldInfoOnly, objectFile.IsLittleEndian); break;
+                    case MachDyldInfo dyldInfo: WriteDyldInfoCommand(loadCommandsStream, MachLoadCommandType.DyldInfo, dyldInfo, objectFile.IsLittleEndian); break;
+                    case MachTwoLevelHints twoLevelHints: WriteTwoLevelHintsCommand(loadCommandsStream, twoLevelHints, objectFile.IsLittleEndian); break;
+                    case MachCustomLoadCommand customLoadCommand:
+                        WriteLoadCommandHeader(loadCommandsStream, customLoadCommand.Type, customLoadCommand.Data.Length + LoadCommandHeader.BinarySize, objectFile.IsLittleEndian);
+                        loadCommandsStream.Write(customLoadCommand.Data);
+                        break;
+                    case MachUuid uuid: WriteUuid(loadCommandsStream, uuid, objectFile.IsLittleEndian); break;
+                    case MachSourceVersion sourceVersion: WriteSourceVersion(loadCommandsStream, sourceVersion, objectFile.IsLittleEndian); break;
+                    case MachEncryptionInfo encryptionInfo: WriteEncryptionInfo64(loadCommandsStream, encryptionInfo, objectFile.IsLittleEndian); break;
+                    case MachRunPath runPath: WriteRunPath(loadCommandsStream, runPath, objectFile.IsLittleEndian, objectFile.Is64Bit); break;
+                    case MachLoadDylinkerCommand loadDylinker: WriteLoadDylinker(loadCommandsStream, loadDylinker, objectFile.IsLittleEndian, objectFile.Is64Bit); break;
+
+                    default:
+                        Debug.Fail($"Unknown load command {loadCommand.GetType().Name}");
+                        break;
+                }
+            }
+
+            int loadCommandsLength = (int)(loadCommandsStream.Position - loadCommandsStart);
+
+            // Align the commands
+            int alignedLoadCommandsLength = AlignedSize(
+                loadCommandsLength,
+                objectFile.Is64Bit);
+
+            loadCommandsStream.WritePadding(alignedLoadCommandsLength - loadCommandsLength);
+        }
+
         public static void Write(Stream stream, MachObjectFile objectFile)
         {
             long initialOffset = stream.Position;
@@ -412,48 +469,7 @@ namespace Melanzana.MachO
             BinaryPrimitives.WriteUInt32BigEndian(machMagicBuffer, magic);
 
             var loadCommandsStream = new MemoryStream();
-            foreach (var loadCommand in objectFile.LoadCommands)
-            {
-                switch (loadCommand)
-                {
-                    case MachSegment segment: WriteSegment(loadCommandsStream, segment, isLittleEndian, objectFile.Is64Bit); break;
-                    case MachCodeSignature codeSignature: WriteLinkEdit(loadCommandsStream, MachLoadCommandType.CodeSignature, codeSignature, isLittleEndian); break;
-                    case MachDylibCodeSigningDirs codeSigningDirs: WriteLinkEdit(loadCommandsStream, MachLoadCommandType.DylibCodeSigningDRs, codeSigningDirs, isLittleEndian); break;
-                    case MachSegmentSplitInfo segmentSplitInfo: WriteLinkEdit(loadCommandsStream, MachLoadCommandType.SegmentSplitInfo, segmentSplitInfo, isLittleEndian); break;
-                    case MachFunctionStarts functionStarts: WriteLinkEdit(loadCommandsStream, MachLoadCommandType.FunctionStarts, functionStarts, isLittleEndian); break;
-                    case MachDataInCode dataInCode: WriteLinkEdit(loadCommandsStream, MachLoadCommandType.DataInCode, dataInCode, isLittleEndian); break;
-                    case MachLinkerOptimizationHint linkerOptimizationHint: WriteLinkEdit(loadCommandsStream, MachLoadCommandType.LinkerOptimizationHint, linkerOptimizationHint, isLittleEndian); break;
-                    case MachDyldExportsTrie dyldExportsTrie: WriteLinkEdit(loadCommandsStream, MachLoadCommandType.DyldExportsTrie, dyldExportsTrie, isLittleEndian); break;
-                    case MachDyldChainedFixups dyldChainedFixups: WriteLinkEdit(loadCommandsStream, MachLoadCommandType.DyldChainedFixups, dyldChainedFixups, isLittleEndian); break;
-                    case MachLoadDylibCommand loadDylibCommand: WriteDylibCommand(loadCommandsStream, MachLoadCommandType.LoadDylib, loadDylibCommand, isLittleEndian, objectFile.Is64Bit); break;
-                    case MachLoadWeakDylibCommand loadWeakDylibCommand: WriteDylibCommand(loadCommandsStream, MachLoadCommandType.LoadWeakDylib, loadWeakDylibCommand, isLittleEndian, objectFile.Is64Bit); break;
-                    case MachReexportDylibCommand reexportDylibCommand: WriteDylibCommand(loadCommandsStream, MachLoadCommandType.ReexportDylib, reexportDylibCommand, isLittleEndian, objectFile.Is64Bit); break;
-                    case MachEntrypointCommand entrypointCommand: WriteMainCommand(loadCommandsStream, entrypointCommand, isLittleEndian); break;
-                    case MachVersionMinMacOS macOSBuildVersion: WriteVersionMinCommand(loadCommandsStream, MachLoadCommandType.VersionMinMacOS, macOSBuildVersion, isLittleEndian); break;
-                    case MachVersionMinIOS iOSBuildVersion: WriteVersionMinCommand(loadCommandsStream, MachLoadCommandType.VersionMinIPhoneOS, iOSBuildVersion, isLittleEndian); break;
-                    case MachVersionMinTvOS tvOSBuildVersion: WriteVersionMinCommand(loadCommandsStream, MachLoadCommandType.VersionMinTvOS, tvOSBuildVersion, isLittleEndian); break;
-                    case MachVersionMinWatchOS watchOSBuildVersion: WriteVersionMinCommand(loadCommandsStream, MachLoadCommandType.VersionMinWatchOS, watchOSBuildVersion, isLittleEndian); break;
-                    case MachBuildVersion buildVersion: WriteBuildVersion(loadCommandsStream, buildVersion, isLittleEndian); break;
-                    case MachSymbolTable symbolTable: WriteSymbolTableCommand(loadCommandsStream, symbolTable, isLittleEndian, objectFile.Is64Bit); break;
-                    case MachDynamicLinkEditSymbolTable dySymbolTable: WriteDynamicLinkEditSymbolTableCommand(loadCommandsStream, dySymbolTable, isLittleEndian); break;
-                    case MachDyldInfoOnly dyldInfoOnly: WriteDyldInfoCommand(loadCommandsStream, MachLoadCommandType.DyldInfoOnly, dyldInfoOnly, isLittleEndian); break;
-                    case MachDyldInfo dyldInfo: WriteDyldInfoCommand(loadCommandsStream, MachLoadCommandType.DyldInfo, dyldInfo, isLittleEndian); break;
-                    case MachTwoLevelHints twoLevelHints: WriteTwoLevelHintsCommand(loadCommandsStream, twoLevelHints, isLittleEndian); break;
-                    case MachCustomLoadCommand customLoadCommand:
-                        WriteLoadCommandHeader(loadCommandsStream, customLoadCommand.Type, customLoadCommand.Data.Length + LoadCommandHeader.BinarySize, isLittleEndian);
-                        loadCommandsStream.Write(customLoadCommand.Data);
-                        break;
-                    case MachUuid uuid: WriteUuid(loadCommandsStream, uuid, isLittleEndian); break;
-                    case MachSourceVersion sourceVersion: WriteSourceVersion(loadCommandsStream, sourceVersion, isLittleEndian); break;
-                    case MachEncryptionInfo encryptionInfo: WriteEncryptionInfo64(loadCommandsStream, encryptionInfo, isLittleEndian); break;
-                    case MachRunPath runPath: WriteRunPath(loadCommandsStream, runPath, isLittleEndian, objectFile.Is64Bit); break;
-                    case MachLoadDylinkerCommand loadDylinker: WriteLoadDylinker(loadCommandsStream, loadDylinker, isLittleEndian, objectFile.Is64Bit); break;
-
-                    default:
-                        Debug.Fail($"Unknown load command {loadCommand.GetType().Name}");
-                        break;
-                }
-            }
+            WriteLoadCommands(loadCommandsStream, objectFile);
 
             if (objectFile.Is64Bit)
             {

@@ -52,7 +52,12 @@ namespace Melanzana.CodeSign
 
             foreach (var fsEntryInfo in rootDirectoryInfo.EnumerateFileSystemInfos().OrderBy(i => i.Name, StringComparer.Ordinal))
             {
-                string fsEntryPath = Path.Combine(relativePath, fsEntryInfo.Name);
+                string fsEntryPath = fsEntryInfo.Name;
+
+                if (!string.IsNullOrEmpty(relativePath))
+                {
+                    fsEntryPath = $"{relativePath}/{fsEntryInfo.Name}";
+                }
 
                 if (exclusions.Contains(fsEntryPath, StringComparer.OrdinalIgnoreCase))
                 {

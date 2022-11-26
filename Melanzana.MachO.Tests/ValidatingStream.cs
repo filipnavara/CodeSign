@@ -1,6 +1,7 @@
 ﻿using Melanzana.Streams;
 using System;
 using System.IO;
+using System.Linq;
 using Xunit;
 
 namespace Melanzana.MachO.Tests
@@ -62,7 +63,9 @@ namespace Melanzana.MachO.Tests
             }
             else
             {
-                Assert.Equal(expected, actual);
+                // Assert.Equal for large byte arrays does not perform particularly well;
+                // use SequenceEqual instead.
+                Assert.True(expected.SequenceEqual(actual));
             }
         }
     }

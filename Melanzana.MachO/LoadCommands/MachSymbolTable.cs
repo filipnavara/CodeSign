@@ -31,7 +31,9 @@ namespace Melanzana.MachO
 
             this.objectFile = objectFile;
             this.symbolTableData = symbolTableData;
+            this.symbolTableData.Parent = this;
             this.stringTableData = stringTableData;
+            this.stringTableData.Parent = this;
 
             // Create a section map now since the section indexes may change later
             sectionMap = new Dictionary<byte, MachSection>();

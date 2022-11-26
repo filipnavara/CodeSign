@@ -29,10 +29,15 @@ namespace Melanzana.MachO
             ArgumentNullException.ThrowIfNull(exportData);
 
             RebaseData = rebaseData;
+            RebaseData.Parent = this;
             BindData = bindData;
+            BindData.Parent = this;
             WeakBindData = weakBindData;
+            WeakBindData.Parent = this;
             LazyBindData = lazyBindData;
+            LazyBindData.Parent = this;
             ExportData = exportData;
+            ExportData.Parent = this;
         }
 
         public MachLinkEditData RebaseData { get; private init; }

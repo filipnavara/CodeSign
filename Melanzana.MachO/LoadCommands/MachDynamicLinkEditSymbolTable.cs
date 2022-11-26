@@ -6,16 +6,18 @@ namespace Melanzana.MachO
     public class MachDynamicLinkEditSymbolTable : MachLoadCommand
     {
         private readonly Stream stream;
+        private readonly MachObjectFile objectFile;
         internal DynamicSymbolTableCommandHeader Header;
 
-        public MachDynamicLinkEditSymbolTable(Stream stream)
+        public MachDynamicLinkEditSymbolTable(MachObjectFile objectFile, Stream stream)
         {
-            this.Header = new DynamicSymbolTableCommandHeader();
+            this.objectFile = objectFile ?? throw new ArgumentNullException(nameof(objectFile));
             this.stream = stream ?? throw new ArgumentNullException(nameof(stream));
+            this.Header = new DynamicSymbolTableCommandHeader();
         }
 
-        public MachDynamicLinkEditSymbolTable(Stream stream, MachSymbolTable symbolTable)
-            : this(stream)
+        public MachDynamicLinkEditSymbolTable(MachObjectFile objectFile, Stream stream, MachSymbolTable symbolTable)
+            : this(objectFile, stream)
         {
             Span<bool> bucketUsed = stackalloc bool[3];
             var symbols = symbolTable.Symbols;
@@ -67,10 +69,11 @@ namespace Melanzana.MachO
             }
         }
 
-        internal MachDynamicLinkEditSymbolTable(Stream stream, DynamicSymbolTableCommandHeader header)
+        internal MachDynamicLinkEditSymbolTable(MachObjectFile objectFile, Stream stream, DynamicSymbolTableCommandHeader header)
         {
-            this.Header = header;
+            this.objectFile = objectFile ?? throw new ArgumentNullException(nameof(objectFile));
             this.stream = stream ?? throw new ArgumentNullException(nameof(stream));
+            this.Header = header;
         }
 
         public uint LocalSymbolsIndex
@@ -185,23 +188,35 @@ namespace Melanzana.MachO
         {
             get
             {
-                Debug.Assert(TableOfContentsCount == 0);
-                yield return new MachLinkEditData(stream, TableOfContentsOffset, TableOfContentsCount);
+                // The sizes of the entries in the various tables are defined in loader.h and reloc.h, e.g.
+                // - https://opensource.apple.com/source/xnu/xnu-2050.18.24/EXTERNAL_HEADERS/mach-o/loader.h
+                // - https://opensource.apple.com/source/xnu/xnu-2050.18.24/EXTERNAL_HEADERS/mach-o/reloc.h
 
-                Debug.Assert(ModuleTableCount == 0);
-                yield return new MachLinkEditData(stream, ModuleTableOffset, ModuleTableCount);
+                // dylib_table_of_contents in loader.h
+                const int TableOfContentsEntrySize = 8;
 
-                Debug.Assert(ExternalReferenceTableCount == 0);
-                yield return new MachLinkEditData(stream, ExternalReferenceTableOffset, ExternalReferenceTableCount);
+                // dylib_module[_64] in loader.h
+                var moduleTableEntrySize = this.objectFile.Is64Bit ? 56u : 52u;
 
-                // An indirect symbol table is a list of 32-bit values
-                yield return new MachLinkEditData(stream, IndirectSymbolTableOffset, IndirectSymbolTableCount * 4);
+                // dylib_reference in loader.h
+                const int ReferenceTableEntrySize = 4;
 
-                Debug.Assert(ExternalReferenceTableCount == 0);
-                yield return new MachLinkEditData(stream, ExternalReferenceTableOffset, ExternalReferenceTableCount);
+                const int IndirectSymbolTableEntrySize = 4;
 
-                Debug.Assert(ExternalRelocationTableCount == 0);
-                yield return new MachLinkEditData(stream, LocalRelocationTableOffset, LocalRelocationTableCount);
+                // relocation_info in reloc.h
+                const int RelocationTableEntrySize = 8;
+
+                yield return new MachLinkEditData(stream, TableOfContentsOffset, TableOfContentsCount * TableOfContentsEntrySize);
+
+                yield return new MachLinkEditData(stream, ModuleTableOffset, ModuleTableCount * moduleTableEntrySize);
+
+                yield return new MachLinkEditData(stream, ExternalReferenceTableOffset, ExternalReferenceTableCount * ReferenceTableEntrySize);
+
+                yield return new MachLinkEditData(stream, IndirectSymbolTableOffset, IndirectSymbolTableCount * IndirectSymbolTableEntrySize);
+
+                yield return new MachLinkEditData(stream, ExternalRelocationTableOffset, ExternalRelocationTableCount * ReferenceTableEntrySize);
+
+                yield return new MachLinkEditData(stream, LocalRelocationTableOffset, LocalRelocationTableCount * RelocationTableEntrySize);
             }
         }
     }

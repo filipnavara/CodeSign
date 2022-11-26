@@ -149,7 +149,7 @@ namespace Melanzana.MachO.Tests
             symbolTable.Symbols.Add(new MachSymbol { Name = "ltmp0", Section = textSection, Value = 0, Descriptor = 0, Type = MachSymbolType.Section });
             symbolTable.Symbols.Add(new MachSymbol { Name = "ltmp1", Section = compactUnwindSection, Value = 0x18, Descriptor = 0, Type = MachSymbolType.Section });
             symbolTable.Symbols.Add(new MachSymbol { Name = "_main", Section = textSection, Value = 0, Descriptor = 0, Type = MachSymbolType.Section | MachSymbolType.External });
-            objectFile.LoadCommands.Add(new MachDynamicLinkEditSymbolTable(Stream.Null, symbolTable));
+            objectFile.LoadCommands.Add(new MachDynamicLinkEditSymbolTable(objectFile, Stream.Null, symbolTable));
 
             objectFile.UpdateLayout();
             Assert.Equal(0u, segment.VirtualAddress);

@@ -12,6 +12,7 @@ namespace Melanzana.CodeSign
         private readonly bool hasResources;
         private readonly string? mainExecutable;
         private readonly NSDictionary? infoPList;
+        private readonly byte[]? infoPlistBytes;
         private readonly string? bundleIdentifier;
 
         public Bundle(string path)
@@ -35,6 +36,7 @@ namespace Melanzana.CodeSign
             if (File.Exists(infoPlistPath))
             {
                 infoPList = (NSDictionary)PropertyListParser.Parse(infoPlistPath);
+                infoPlistBytes = File.ReadAllBytes(infoPlistPath);
 
                 if (infoPList.TryGetValue("CFBundleExecutable", out var temp) && temp is NSString bundleExecutable)
                 {
@@ -78,6 +80,8 @@ namespace Melanzana.CodeSign
         public string? BundleIdentifier => bundleIdentifier;
 
         public NSDictionary InfoPList => infoPList ?? new NSDictionary();
+
+        public byte[]? InfoPlistBytes => infoPlistBytes;
 
         public void AddResourceRules(ResourceBuilder builder, bool useV2Rules = true)
         {

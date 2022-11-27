@@ -19,11 +19,41 @@ namespace Melanzana.CodeSign
 
         }
 
-        public IEnumerable<string> TeamIdentifiers => ((NSArray)plist["TeamIdentifier"]).Select(i => i.ToString()!).ToArray();
+        public IList<string> TeamIdentifiers => GetStringArray("TeamIdentifier");
 
         public IEnumerable<X509Certificate2> DeveloperCertificates =>
             ((NSArray)plist["DeveloperCertificates"]).OfType<NSData>().Select(d => new X509Certificate2((byte[])d));
 
         public NSDictionary Entitlements => (NSDictionary)plist["Entitlements"];
+
+        public string AppIDName => plist["AppIDName"].ToString()!;
+
+        public IList<string> ApplicationIdentifierPrefix => GetStringArray("ApplicationIdentifierPrefix");
+
+        public DateTimeOffset CreationDate => new DateTimeOffset(((NSDate)plist["CreationDate"]).Date);
+
+        public IList<string> Platform => GetStringArray("Platform");
+
+        public DateTimeOffset ExpirationDate => new DateTimeOffset(((NSDate)plist["ExpirationDate"]).Date);
+
+        public string Name => plist["Name"].ToString()!;
+
+        public IList<string> ProvisionedDevices => GetStringArray("ProvisionedDevices");
+
+        public string TeamName => plist["TeamName"].ToString()!;
+
+        public Guid UUID => new Guid(plist["UUID"].ToString()!);
+
+        public int Version => (int)plist["Version"].ToObject();
+
+        private IList<string> GetStringArray(string name)
+            => ((NSArray)plist[name]).Select(v => v.ToString()!).ToArray();
+
+        public override string ToString() => this.Name;
+
+        public void Save(string filename)
+        {
+            File.WriteAllText(filename, this.plist.ToXmlPropertyList());
+        }
     }
 }

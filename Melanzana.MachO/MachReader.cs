@@ -392,14 +392,34 @@ namespace Melanzana.MachO
             return objectFile;
         }
 
-        public static IEnumerable<MachObjectFile> Read(Stream stream)
+        private static MachMagic ReadMagic(Stream stream)
         {
             ArgumentNullException.ThrowIfNull(stream);
 
-            var magicBuffer = new byte[4];
+            Span<byte> magicBuffer = stackalloc byte[4];
+            stream.Seek(0, SeekOrigin.Begin);
             stream.ReadFully(magicBuffer);
 
             var magic = (MachMagic)BinaryPrimitives.ReadUInt32BigEndian(magicBuffer);
+            if (!Enum.IsDefined<MachMagic>(magic))
+            {
+                throw new InvalidDataException("The archive is not a valid MACH object.");
+            }
+
+            return magic;
+        }
+
+        public static bool IsFatMach(Stream stream)
+        {
+            var magic = ReadMagic(stream);
+            return magic == MachMagic.FatMagicLittleEndian || magic == MachMagic.FatMagicBigEndian;
+        }
+
+        public static IEnumerable<MachObjectFile> Read(Stream stream)
+        {
+            var magic = ReadMagic(stream);
+            var magicBuffer = new byte[4];
+
             if (magic == MachMagic.FatMagicLittleEndian || magic == MachMagic.FatMagicBigEndian)
             {
                 var headerBuffer = new byte[Math.Max(FatHeader.BinarySize, FatArchHeader.BinarySize)];

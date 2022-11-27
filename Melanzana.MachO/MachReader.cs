@@ -415,10 +415,12 @@ namespace Melanzana.MachO
             return magic == MachMagic.FatMagicLittleEndian || magic == MachMagic.FatMagicBigEndian;
         }
 
-        public static IEnumerable<MachObjectFile> Read(Stream stream)
+        public static IList<MachObjectFile> Read(Stream stream)
         {
             var magic = ReadMagic(stream);
             var magicBuffer = new byte[4];
+
+            List<MachObjectFile> values = new List<MachObjectFile>();
 
             if (magic == MachMagic.FatMagicLittleEndian || magic == MachMagic.FatMagicBigEndian)
             {
@@ -433,13 +435,15 @@ namespace Melanzana.MachO
                     var machOSlice = stream.Slice(fatArchHeader.Offset, fatArchHeader.Size);
                     machOSlice.ReadFully(magicBuffer);
                     magic = (MachMagic)BinaryPrimitives.ReadUInt32BigEndian(magicBuffer);
-                    yield return ReadSingle(fatArchHeader, magic, machOSlice);
+                    values.Add(ReadSingle(fatArchHeader, magic, machOSlice));
                 }
             }
             else
             {
-                yield return ReadSingle(null, magic, stream);
+                values.Add(ReadSingle(null, magic, stream));
             }
+
+            return values;
         }
     }
 }

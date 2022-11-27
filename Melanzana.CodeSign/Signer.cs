@@ -54,7 +54,7 @@ namespace Melanzana.CodeSign
             return new[] { HashType.SHA1, HashType.SHA256 };
         }
 
-        private void SignMachO(string executablePath, string? bundleIdentifier = null, byte[]? resourceSealBytes = null)
+        private void SignMachO(string executablePath, string? bundleIdentifier = null, byte[]? resourceSealBytes = null, byte[]? infoPlistBytes = null)
         {
             var teamId = GetTeamId();
             
@@ -121,6 +121,8 @@ namespace Melanzana.CodeSign
                         cdBuilders[i].SetSpecialSlotData(CodeDirectorySpecialSlot.EntitlementsDer, entitlementsDerBlob);
                     if (resourceSealBytes != null)
                         cdBuilders[i].SetSpecialSlotData(CodeDirectorySpecialSlot.ResourceDirectory, resourceSealBytes);
+                    if (infoPlistBytes != null)
+                        cdBuilders[i].SetSpecialSlotData(CodeDirectorySpecialSlot.InfoPlist, infoPlistBytes);
 
                     signatureSizeEstimate += cdBuilders[i].Size(CodeDirectoryVersion.HighestVersion);
                 }
@@ -226,7 +228,7 @@ namespace Melanzana.CodeSign
 
             if (bundle.MainExecutable != null)
             {
-                SignMachO(bundle.MainExecutable, bundle.BundleIdentifier, resourceSealBytes);
+                SignMachO(bundle.MainExecutable, bundle.BundleIdentifier, resourceSealBytes, bundle.InfoPlistBytes);
             }
         }
 

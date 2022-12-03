@@ -1,9 +1,12 @@
+using System.Diagnostics;
+
 namespace Melanzana.CodeSign
 {
     public class ResourceBuilder
     {
         private readonly HashSet<string> exclusions = new();
         private readonly List<ResourceRule> rules = new();
+        private static readonly RuleComparer ruleComparer = new();
 
         public ResourceBuilder()
         {
@@ -11,7 +14,11 @@ namespace Melanzana.CodeSign
 
         public void AddRule(ResourceRule rule)
         {
-            rules.Add(rule);
+            // Sort the rules by their pattern to match Apple's dictionary
+            // order and make it the output easier to compare.
+            int index = rules.BinarySearch(rule, ruleComparer);
+            Debug.Assert(index < 0);
+            rules.Insert(index < 0 ? ~index : index, rule);
         }
 
         public void AddExclusion(string path)
@@ -99,5 +106,13 @@ namespace Melanzana.CodeSign
         }
 
         public IEnumerable<ResourceRule> Rules => rules;
+
+        private class RuleComparer : IComparer<ResourceRule>
+        {
+            public int Compare(ResourceRule? x, ResourceRule? y)
+            {
+                return string.CompareOrdinal(x?.Pattern, y?.Pattern);
+            }
+        }
     }
 }

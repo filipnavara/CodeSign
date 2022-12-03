@@ -48,7 +48,7 @@ namespace Melanzana.CodeSign
                     {
                         mainExecutable = (string)bundleExecutable;
                     }
-                    
+
                     if (!File.Exists(Path.Combine(ContentsPath, mainExecutable)))
                     {
                         mainExecutable = null;
@@ -107,12 +107,14 @@ namespace Melanzana.CodeSign
 
                 // Include specific files:
                 builder.AddRule(new ResourceRule("^embedded\\.provisionprofile$") { Weight = 20 });
-                builder.AddRule(new ResourceRule("^version.plist$") { Weight = 20 });
+                builder.AddRule(new ResourceRule("^version\\.plist$") { Weight = 20 });
 
                 builder.AddRule(new ResourceRule("^(.*/)?\\.DS_Store$") { IsOmitted = true, Weight = 2000 });
             }
             else
             {
+                // NOTE: Apple historically used `version.plist` instead of `version\\.plist`, so this is
+                // bug-for-bug compatibility.
                 builder.AddRule(new ResourceRule("^version.plist$"));
                 builder.AddRule(new ResourceRule(hasResources ? $"^{resourcePrefix}" : "^.*"));
             }

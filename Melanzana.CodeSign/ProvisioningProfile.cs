@@ -8,15 +8,19 @@ namespace Melanzana.CodeSign
     {
         private readonly NSDictionary plist;
 
-        public ProvisioningProfile(string fileName)
+        public ProvisioningProfile(byte[] bytes)
         {
             var signedCms = new SignedCms();
-            signedCms.Decode(File.ReadAllBytes(fileName));
+            signedCms.Decode(bytes);
             var contentInfo = signedCms.ContentInfo;
             var content = contentInfo.Content;
 
             plist = (NSDictionary)XmlPropertyListParser.Parse(content);
+        }
 
+        public ProvisioningProfile(string fileName)
+            : this(File.ReadAllBytes(fileName))
+        {
         }
 
         public IList<string> TeamIdentifiers => GetStringArray("TeamIdentifier");
@@ -50,6 +54,8 @@ namespace Melanzana.CodeSign
             => ((NSArray)plist[name]).Select(v => v.ToString()!).ToArray();
 
         public override string ToString() => this.Name;
+
+        public NSDictionary PropertyList => this.PropertyList;
 
         public void Save(string filename)
         {

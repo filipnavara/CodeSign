@@ -7,6 +7,7 @@ namespace Melanzana.MachO
         public MachTwoLevelHints(MachObjectFile objectFile, MachLinkEditData data)
         {
             Data = data;
+            Data.Parent = this;
         }
 
         public uint FileOffset => Data.FileOffset;

@@ -37,6 +37,9 @@ namespace Melanzana.MachO
             this.SectionName = sectionName;
             this.dataStream = stream;
             this.relocationData = relocationData;
+
+            if(this.relocationData != null)
+                this.relocationData.Parent = this;
         }
 
         /// <summary>

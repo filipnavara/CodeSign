@@ -26,6 +26,8 @@ namespace Melanzana.MachO
             this.FileOffset = offset;
         }
 
+        public object? Parent { get; set; }
+
         public uint FileOffset { get; set; }
 
         public ulong Size
@@ -63,5 +65,7 @@ namespace Melanzana.MachO
             dataStream = new UnclosableMemoryStream();
             return dataStream;
         }
+
+        public override string ToString() => $"Link Edit Data: 0x{FileOffset:X}-0x{FileOffset + Size:X} (0x{Size:X})";
     }
 }
